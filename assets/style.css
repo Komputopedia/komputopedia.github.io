@@ -49,3 +49,24 @@ h3 { margin: 0 0 8px; font-size: 1.08rem; }
 .link:hover { text-decoration: underline; }
 
 footer { margin-top: 48px; padding: 24px 0; border-top: 1px solid var(--line); color: var(--muted); font-size: .9rem; }
+
+/* v0.2: nav, language switch, timeline, founders */
+html { scroll-behavior: smooth; }
+section { scroll-margin-top: 56px; }
+.topbar { position: sticky; top: 0; z-index: 10; background: rgba(255,255,255,.95); border-bottom: 1px solid var(--line); }
+.topbar .wrap { display: flex; flex-wrap: wrap; gap: 4px 18px; align-items: center; padding-top: 10px; padding-bottom: 10px; font-size: .92rem; }
+.topbar a { color: var(--primary); text-decoration: none; font-weight: 600; }
+.topbar a:hover { text-decoration: underline; }
+.lang { margin-left: auto; color: var(--muted); }
+.lang strong { color: var(--text); }
+
+.timeline { list-style: none; margin: 0; padding: 0 0 0 18px; border-left: 3px solid var(--tint); max-width: 760px; }
+.timeline li { position: relative; padding: 0 0 18px 16px; }
+.timeline li::before { content: ""; position: absolute; left: -27px; top: 6px; width: 13px; height: 13px; border-radius: 50%; background: var(--secondary); border: 3px solid #fff; }
+.timeline .when { font-weight: 700; color: var(--primary); }
+.timeline p { margin: 2px 0 0; color: var(--muted); }
+
+.person { align-items: flex-start; }
+.avatar { position: relative; width: 96px; height: 96px; border-radius: 50%; background: var(--tint); color: var(--primary); display: grid; place-items: center; font-weight: 700; font-size: 1.3rem; margin-bottom: 14px; overflow: hidden; border: 3px solid var(--secondary); }
+.avatar img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.role { color: var(--primary) !important; font-weight: 600; font-size: .9rem; margin: -4px 0 10px !important; }
