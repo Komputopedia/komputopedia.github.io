@@ -1,0 +1,51 @@
+/* Komputopedia site: brand blues, Open Sans, clean white space (see 00-Company/Brand/brand-guide.md) */
+@font-face { font-family: "Open Sans"; src: url("fonts/OpenSans-400.ttf") format("truetype"); font-weight: 400; font-display: swap; }
+@font-face { font-family: "Open Sans"; src: url("fonts/OpenSans-600.ttf") format("truetype"); font-weight: 600; font-display: swap; }
+@font-face { font-family: "Open Sans"; src: url("fonts/OpenSans-700.ttf") format("truetype"); font-weight: 700; font-display: swap; }
+
+:root {
+  --primary: #3A55B3;
+  --secondary: #5C7BEB;
+  --tint: #EEF2FD;
+  --text: #1F2433;
+  --muted: #5B6275;
+  --line: #E2E6F0;
+  --bg: #FFFFFF;
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; font-family: "Open Sans", system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--text); background: var(--bg); line-height: 1.6; }
+.wrap { max-width: 1040px; margin: 0 auto; padding: 0 24px; }
+
+.hero { background: var(--tint); border-bottom: 1px solid var(--line); padding: 56px 0 44px; text-align: center; }
+.logo { width: min(420px, 80%); height: auto; }
+.motto { margin: 18px auto 0; max-width: 560px; color: var(--primary); font-weight: 600; font-size: 1.05rem; }
+
+section { padding: 44px 0 8px; }
+h2 { color: var(--primary); font-size: 1.4rem; margin: 0 0 16px; }
+h3 { margin: 0 0 8px; font-size: 1.08rem; }
+.lead { max-width: 760px; color: var(--muted); margin: 0 0 24px; }
+
+.grid { display: grid; gap: 16px; }
+.divisions { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+.cards { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+
+.division { border-left: 4px solid var(--secondary); padding: 4px 0 4px 14px; }
+.division p { margin: 0; color: var(--muted); }
+.division.muted { border-left-color: var(--line); }
+.division.muted h3 { color: var(--muted); }
+
+.card { border: 1px solid var(--line); border-radius: 12px; padding: 20px; background: #fff; display: flex; flex-direction: column; }
+.card p { color: var(--muted); margin: 0 0 12px; }
+.card-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.tag { font-size: .78rem; font-weight: 700; color: var(--primary); background: var(--tint); padding: 3px 10px; border-radius: 999px; }
+.status { font-size: .78rem; font-weight: 600; color: var(--muted); }
+.status::before { content: "●"; margin-right: 6px; }
+.status.active::before { color: #2E9E6B; }
+.status.progress::before { color: var(--secondary); }
+.principles { margin: 0 0 4px; padding-left: 18px; color: var(--muted); }
+.link { margin-top: auto; color: var(--primary); font-weight: 600; text-decoration: none; }
+.link:hover { text-decoration: underline; }
+
+footer { margin-top: 48px; padding: 24px 0; border-top: 1px solid var(--line); color: var(--muted); font-size: .9rem; }
