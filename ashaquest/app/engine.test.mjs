@@ -132,6 +132,11 @@ test("payday pays approved, unpaid entries up to the period end", () => {
   assert.equal(r.cents, 50);
 });
 
+test("payday ignores entries before the child's start date (trial days)", () => {
+  const entries = [e({ id: "a", date: "2026-11-14", points: 5 }), e({ id: "b", date: "2026-11-16", points: 2 })];
+  assert.deepEqual(E.payable(entries, "2026-11-29", 10, "2026-11-16").ids, ["b"]);
+});
+
 test("negative points make negative pay", () => {
   assert.equal(E.payable([e({ id: "a", date: "2026-11-20", points: -3 })], "2026-11-29", 10).cents, -30);
 });

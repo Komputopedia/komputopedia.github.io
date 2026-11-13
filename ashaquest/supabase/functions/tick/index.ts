@@ -73,7 +73,7 @@ async function tickChild(f: any, c: any, today: string, log: string[]) {
     log.push(`${c.username}: auto payday ${prevEnd} ${r.error ? "failed: " + r.error.message : "paid"}`);
   } else if (!pd) {
     const all = (await db.from("entries").select("id,date,points,status,payday_id").eq("child_id", c.id).is("payday_id", null)).data || [];
-    const p = E.payable(all, prevEnd, f.cents_per_point);
+    const p = E.payable(all, prevEnd, f.cents_per_point, c.start_date);
     await db.from("paydays").upsert({ child_id: c.id, period_start: prev.start, period_end: prevEnd, points: p.points, cents: p.cents, status: "draft" }, { onConflict: "child_id,period_end", ignoreDuplicates: true });
     log.push(`${c.username}: payday draft ${prevEnd}`);
   }

@@ -144,9 +144,9 @@ export function summarize(entries, from, to) {
   return { approved, pending, reported: approved + pending };
 }
 
-/** What a payday up to `upTo` pays: approved, unpaid entries dated up to that day. */
-export function payable(entries, upTo, centsPerPoint) {
-  const rows = entries.filter((x) => x.status === "approved" && !x.payday_id && x.date <= upTo);
+/** What a payday up to `upTo` pays: approved, unpaid entries dated up to that day (and not before `from`). */
+export function payable(entries, upTo, centsPerPoint, from) {
+  const rows = entries.filter((x) => x.status === "approved" && !x.payday_id && x.date <= upTo && (!from || x.date >= from));
   const points = rows.reduce((s, x) => s + (Number(x.points) || 0), 0);
   return { ids: rows.map((x) => x.id), points, cents: points * centsPerPoint };
 }
