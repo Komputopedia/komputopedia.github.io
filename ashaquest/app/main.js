@@ -711,4 +711,6 @@ function App() {
   return html`${body}<${Toast} />`;
 }
 
-render(html`<${App} />`, document.getElementById("app"));
+const root = document.getElementById("app");
+root.textContent = ""; // remove the static loading text before Preact takes over
+render(html`<${App} />`, root);
