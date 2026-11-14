@@ -2,11 +2,13 @@
 import { h, render } from "https://esm.sh/preact@10.24.3";
 import { useState, useEffect, useMemo, useCallback, useRef } from "https://esm.sh/preact@10.24.3/hooks";
 import htm from "https://esm.sh/htm@3.1.1";
-import * as E from "./engine.js";
-import * as A from "./api.js";
-import { t, locale } from "./i18n.js";
+import * as E from "./engine.js?v=202611141454";
+import * as A from "./api.js?v=202611141454";
+import { t, locale } from "./i18n.js?v=202611141454";
 
 const html = htm.bind(h);
+const APP_BUILD = "202611141454"; // set by bump-version.sh
+const VersionTag = () => html`<p class="muted small" style="text-align:center;opacity:.7">Asha Quest v0.2 · build ${APP_BUILD}</p>`;
 
 // ---------- formatting ----------
 const eur = (c) => (c < 0 ? "−" : "") + (Math.abs(c) / 100).toLocaleString("nl-NL", { style: "currency", currency: "EUR" });
@@ -413,6 +415,7 @@ function ChildHome({ S, reload }) {
     <${SpendForm} S=${S} child=${child} v=${v} reload=${reload} />
     <${Gallery} S=${S} child=${child} reload=${reload} compact=${true} />
     <${History} v=${v} canDeletePending=${true} reload=${reload} />
+    <${VersionTag} />
   </div>`;
 }
 
@@ -440,6 +443,7 @@ function ParentHome({ S, reload }) {
     ${tab === "gallery" ? html`<${Slideshow} S=${S} child=${null} /><${Gallery} S=${S} child=${null} reload=${reload} canDeleteAll=${true} />` : null}
     ${tab === "family" ? html`<${FamilyTab} key=${child?.id} S=${S} child=${child} reload=${reload} />` : null}
     ${tab === "admin" ? html`<${AdminTab} S=${S} reload=${reload} />` : null}
+    <${VersionTag} />
   </div>`;
 }
 

@@ -1,6 +1,6 @@
 // Data access for Kids Quest. All security is enforced by the database (RLS); this file only shapes calls.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
-import * as E from "./engine.js";
+import * as E from "./engine.js?v=202611141454";
 
 export const SUPABASE_URL = "https://giedyhskakaarfxylrsy.supabase.co";
 const PUBLISHABLE_KEY = "sb_publishable_E_Ffj6dlK78QeMOHKYp6gA_YIZhCxKv"; // safe to publish; access is governed by RLS
