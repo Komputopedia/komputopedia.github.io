@@ -1,5 +1,6 @@
 // Kids Quest account management. Needs the caller's JWT.
-// Actions: create_family (platform admin), add_parent, create_child, set_pin (parents of the family).
+// Actions: create_family (platform admin); add_parent, rename_parent, reset_parent_password, remove_parent,
+// create_child, set_pin (parents of the family).
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
 const URL_ = Deno.env.get("SUPABASE_URL")!;
@@ -90,6 +91,32 @@ Deno.serve(async (req) => {
         const m = (await admin.from("members").select("user_id").eq("child_id", body.child_id).eq("family_id", f.id).single()).data;
         if (!m) throw new Fail("no_child", 404);
         const r = await admin.auth.admin.updateUserById(m.user_id, { password: body.pin });
+        if (r.error) throw new Fail(r.error.message);
+        return json({ ok: true });
+      }
+      case "rename_parent": case "reset_parent_password": case "remove_parent": {
+        const f = await familyFor(body.family_id);
+        const target = (await admin.from("members").select("*").eq("user_id", body.user_id).eq("family_id", f.id).eq("role", "parent").maybeSingle()).data;
+        if (!target) throw new Fail("no_parent", 404);
+        if (body.action === "rename_parent") {
+          const name = String(body.name || "").trim();
+          if (!name) throw new Fail("bad_input");
+          await admin.from("members").update({ display_name: name }).eq("user_id", target.user_id);
+          return json({ ok: true });
+        }
+        if (body.action === "reset_parent_password") {
+          if (String(body.password || "").length < 8) throw new Fail("bad_password");
+          const r = await admin.auth.admin.updateUserById(target.user_id, { password: body.password });
+          if (r.error) throw new Fail(r.error.message);
+          return json({ ok: true });
+        }
+        // remove_parent: never yourself, never the last parent, never a platform admin
+        if (target.user_id === u.user.id) throw new Fail("cannot_remove_self");
+        const parents = (await admin.from("members").select("user_id").eq("family_id", f.id).eq("role", "parent")).data || [];
+        if (parents.length <= 1) throw new Fail("last_parent");
+        const adm = (await admin.from("platform_admins").select("user_id").eq("user_id", target.user_id).maybeSingle()).data;
+        if (adm) throw new Fail("is_admin");
+        const r = await admin.auth.admin.deleteUser(target.user_id); // members row goes with it (on delete cascade)
         if (r.error) throw new Fail(r.error.message);
         return json({ ok: true });
       }

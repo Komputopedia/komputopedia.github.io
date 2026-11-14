@@ -164,12 +164,20 @@ export function balance(txs) { return txs.filter((t) => t.status === "approved")
 /** Points earned back for charity spending (cents negative or positive). */
 export function charityPoints(cents, centsPerPoint, ratio) { return Math.ceil((Math.abs(cents) / centsPerPoint) * ratio - 1e-9); }
 
-/** Allowance pay dates in [from, to], never before the allowance start date. */
+/**
+ * Allowance pay dates in [from, to], never before the allowance start date.
+ * weekly: on `weekday`, every `everyWeeks` weeks counted from the first such day on or after the start.
+ * monthly: on day `monthday` (default the 1st).
+ */
 export function allowanceDates(a, from, to) {
   const out = [];
-  const s = a.start_date && a.start_date > from ? a.start_date : from;
+  const start = a.start_date || from;
+  const s = start > from ? start : from;
+  let first = start;
+  while (weekday(first) !== (a.weekday || 1)) first = addDays(first, 1);
+  const every = Math.max(1, Number(a.everyWeeks) || 1);
   for (let d = s; d <= to; d = addDays(d, 1)) {
-    if (a.freq === "weekly" && weekday(d) === (a.weekday || 1)) out.push(d);
+    if (a.freq === "weekly" && d >= first && weekday(d) === (a.weekday || 1) && ((dayNum(d) - dayNum(first)) / 7) % every === 0) out.push(d);
     if (a.freq === "monthly" && Number(d.slice(8)) === (a.monthday || 1)) out.push(d);
   }
   return out;

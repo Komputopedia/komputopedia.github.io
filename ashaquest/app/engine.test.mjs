@@ -203,3 +203,17 @@ test("entries logged today for an activity are counted for the daily limit", () 
   const entries = [e({ activity_id: "kamar", date: "2026-11-16" }), e({ activity_id: "kamar", date: "2026-11-16", status: "rejected" })];
   assert.equal(E.countToday(entries, "kamar", "2026-11-16"), 1);
 });
+
+test("allowance every 2 weeks on the chosen weekday, counted from the start", () => {
+  const a = { freq: "weekly", everyWeeks: 2, weekday: 5, start_date: "2026-11-14" }; // first Friday after start: 20 Nov
+  assert.deepEqual(E.allowanceDates(a, "2026-11-14", "2026-12-31"), ["2026-11-20", "2026-12-04", "2026-12-18"]);
+});
+
+test("allowance every 4 weeks", () => {
+  const a = { freq: "weekly", everyWeeks: 4, weekday: 1, start_date: "2026-11-16" };
+  assert.deepEqual(E.allowanceDates(a, "2026-11-01", "2027-01-31"), ["2026-11-16", "2026-12-14", "2027-01-11"]);
+});
+
+test("monthly allowance is paid on the 1st", () => {
+  assert.deepEqual(E.allowanceDates({ freq: "monthly", start_date: "2026-11-14" }, "2026-11-01", "2027-01-15"), ["2026-12-01", "2027-01-01"]);
+});

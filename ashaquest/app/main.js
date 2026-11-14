@@ -14,7 +14,8 @@ const signed = (n) => (n > 0 ? "+" : n < 0 ? "−" : "") + Math.abs(n);
 const fmtDay = (s, long) => { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d).toLocaleDateString(locale, long ? { weekday: "long", day: "numeric", month: "long" } : { weekday: "short", day: "numeric", month: "short" }); };
 const parseEur = (v) => { const n = Number(String(v).replace(/[€\s]/g, "").replace(",", ".")); return isFinite(n) && n > 0 ? Math.round(n * 100) : null; };
 const mmss = (ms) => { const s = Math.max(0, Math.floor(ms / 1000)); return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0"); };
-const ERR_KEYS = { period_paid: "errPaid", limit_day: "errLimitDay", limit_week: "errLimitWeek", proposals_off: "errProposalsOff" };
+const ERR_KEYS = { period_paid: "errPaid", limit_day: "errLimitDay", limit_week: "errLimitWeek", proposals_off: "errProposalsOff",
+  cannot_remove_self: "errRemoveSelf", last_parent: "errLastParent", is_admin: "errIsAdmin", email_taken: "errEmailTaken", username_taken: "errUsernameTaken" };
 const errText = (e) => { const m = String(e?.message || e); const k = Object.keys(ERR_KEYS).find((x) => m.includes(x)); return k ? t(ERR_KEYS[k]) : t("errGeneric", { m }); };
 const WEEKDAYS = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"];
 const cycleOf = (child) => ({ anchor: child.period_anchor, periodDays: child.period_days });
@@ -772,6 +773,26 @@ function BackgroundPicker({ S, child, reload }) {
     ${url ? html`<button class="btn sm ghost" disabled=${busy} onClick=${() => run(async () => { await A.updateChild(child.id, { background_path: null }); await reload(); })}>Hapus latar</button>` : null}</div>`;
 }
 
+function ParentRow({ S, m, reload }) {
+  const [busy, run] = useBusy();
+  const [mode, setMode] = useState(null); // "name" | "password" | "remove"
+  const [val, setVal] = useState("");
+  const me = m.user_id === S.uid;
+  const call = (body, msg) => run(async () => { await A.accounts({ ...body, user_id: m.user_id }); setMode(null); setVal(""); await reload(); }, msg);
+  return html`<div class="rule"><div class="row wrap-row"><span style="font-size:22px">👤</span><b class="grow">${m.display_name}${me ? " (Anda)" : ""}</b>
+      <button class="btn sm ghost" onClick=${() => { setMode(mode === "name" ? null : "name"); setVal(m.display_name); }}>Ubah nama</button>
+      ${!me ? html`<button class="btn sm ghost" onClick=${() => { setMode(mode === "password" ? null : "password"); setVal(""); }}>Atur ulang sandi</button>
+        <button class="btn sm ghost" onClick=${() => setMode(mode === "remove" ? null : "remove")}>Hapus</button>` : null}</div>
+    ${mode === "name" ? html`<div class="row wrap-row"><input class="in grow" value=${val} onInput=${(e) => setVal(e.target.value)} />
+      <button class="btn sm" disabled=${busy || !val.trim()} onClick=${() => call({ action: "rename_parent", name: val.trim() }, t("saved"))}>${t("save")}</button></div>` : null}
+    ${mode === "password" ? html`<div class="row wrap-row"><input class="in grow" type="text" placeholder="Kata sandi baru (min. 8)" value=${val} onInput=${(e) => setVal(e.target.value)} />
+      <button class="btn sm" disabled=${busy || val.length < 8} onClick=${() => call({ action: "reset_parent_password", password: val }, t("saved"))}>${t("save")}</button></div>
+      <p class="muted small">Berikan kata sandi ini ke ${m.display_name}; dia bisa menggantinya sendiri setelah masuk.</p>` : null}
+    ${mode === "remove" ? html`<div class="banner bad">Hapus akun ${m.display_name}? Dia tidak bisa masuk lagi. Catatan yang sudah dibuat tetap ada.</div>
+      <div class="row"><button class="btn sm ghost" onClick=${() => setMode(null)}>${t("cancel")}</button><button class="btn sm bad" disabled=${busy} onClick=${() => call({ action: "remove_parent" }, "Akun dihapus")}>Ya, hapus</button></div>` : null}
+  </div>`;
+}
+
 function FamilyTab({ S, child, reload }) {
   const [busy, run] = useBusy();
   const firstDay = (() => { const td = E.localDate(new Date(), S.family.timezone); return S.family.period_anchor > td ? S.family.period_anchor : td; })();
@@ -791,10 +812,11 @@ function FamilyTab({ S, child, reload }) {
       <div class="seg"><button type="button" aria-pressed=${(al.mode || "schedule") === "payday"} onClick=${() => setAl({ ...al, mode: "payday" })}>Ikut gajian</button>
         <button type="button" aria-pressed=${(al.mode || "schedule") === "schedule"} onClick=${() => setAl({ ...al, mode: "schedule" })}>Jadwal sendiri</button></div>
       <div class="form"><label class="f">Nominal per minggu${al.mode === "payday" ? "" : " / per kali"} (€)<input class="in" inputmode="decimal" value=${al.amount} onInput=${(e) => setAl({ ...al, amount: e.target.value })} /></label>
-        ${al.mode === "payday" ? html`<p class="muted small">Dibayar bersama gajian: nominal × ${child.period_days / 7} minggu.</p>` : html`<label class="f">Setiap<select class="in" value=${al.freq} onChange=${(e) => setAl({ ...al, freq: e.target.value })}><option value="weekly">minggu</option><option value="monthly">bulan</option></select></label>
-        ${al.freq === "monthly" ? html`<label class="f">Tanggal<input class="in" type="number" min="1" max="28" value=${al.monthday || 1} onInput=${(e) => setAl({ ...al, monthday: Number(e.target.value) })} /></label>`
+        ${al.mode === "payday" ? html`<p class="muted small">Dibayar bersama gajian: nominal × ${child.period_days / 7} minggu.</p>` : html`<label class="f">Setiap<select class="in" value=${al.freq === "monthly" ? "m" : String(al.everyWeeks || 1)} onChange=${(e) => setAl(e.target.value === "m" ? { ...al, freq: "monthly", monthday: 1 } : { ...al, freq: "weekly", everyWeeks: Number(e.target.value) })}>
+          <option value="1">1 minggu</option><option value="2">2 minggu</option><option value="3">3 minggu</option><option value="4">4 minggu</option><option value="m">bulan (tanggal 1)</option></select></label>
+        ${al.freq === "monthly" ? html`<p class="muted small">Dibayar tiap tanggal 1.</p>`
           : html`<label class="f">Hari<select class="in" value=${al.weekday || 1} onChange=${(e) => setAl({ ...al, weekday: Number(e.target.value) })}>${WEEKDAYS.map((d, i) => html`<option value=${i + 1}>${d}</option>`)}</select></label>`}`}</div>
-      <button class="btn sm" style="align-self:flex-start" disabled=${busy} onClick=${() => run(async () => { const a = { enabled: !!al.enabled, mode: al.mode || "schedule", cents: parseEur(al.amount) || 0, freq: al.freq || "weekly", weekday: al.weekday || 1, monthday: al.monthday || 1, start_date: al.start_date || E.localDate(new Date(), S.family.timezone) }; await A.updateChild(child.id, { allowance: a }); await reload(); }, t("saved"))}>${t("save")}</button>
+      <button class="btn sm" style="align-self:flex-start" disabled=${busy} onClick=${() => run(async () => { const a = { enabled: !!al.enabled, mode: al.mode || "schedule", cents: parseEur(al.amount) || 0, freq: al.freq || "weekly", everyWeeks: al.everyWeeks || 1, weekday: al.weekday || 1, monthday: 1, start_date: al.start_date || E.localDate(new Date(), S.family.timezone) }; await A.updateChild(child.id, { allowance: a }); await reload(); }, t("saved"))}>${t("save")}</button>
       <h3>Gambar latar</h3>
       <${BackgroundPicker} S=${S} child=${child} reload=${reload} />
       <h3>Hari libur sholat</h3>
@@ -811,7 +833,7 @@ function FamilyTab({ S, child, reload }) {
       <p class="muted small">Catatan sebelum tanggal mulai dianggap latihan dan tidak ikut gajian.</p>
       <button class="btn sm" style="align-self:flex-start" disabled=${busy} onClick=${() => run(async () => { await A.accounts({ action: "create_child", ...nc }); setNc({ name: "", username: "", pin: "", start_date: firstDay }); await reload(); }, t("saved"))}>Buat akun anak</button></section>
     <section class="panel"><h2>Orang tua</h2>
-      <div class="list">${S.members.filter((m) => m.role === "parent").map((m) => html`<div class="item"><span class="em">👤</span><div class="main"><b>${m.display_name}</b></div></div>`)}</div>
+      <div class="list">${S.members.filter((m) => m.role === "parent").map((m) => html`<${ParentRow} key=${m.user_id} S=${S} m=${m} reload=${reload} />`)}</div>
       <div class="form"><label class="f">Nama<input class="in" value=${np.name} onInput=${(e) => setNp({ ...np, name: e.target.value })} /></label>
         <label class="f">Email<input class="in" type="email" value=${np.email} onInput=${(e) => setNp({ ...np, email: e.target.value })} /></label>
         <label class="f">Kata sandi awal (min. 8)<input class="in" type="password" value=${np.password} onInput=${(e) => setNp({ ...np, password: e.target.value })} /></label></div>
