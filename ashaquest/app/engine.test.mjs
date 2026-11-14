@@ -217,3 +217,25 @@ test("allowance every 4 weeks", () => {
 test("monthly allowance is paid on the 1st", () => {
   assert.deepEqual(E.allowanceDates({ freq: "monthly", start_date: "2026-11-14" }, "2026-11-01", "2027-01-15"), ["2026-12-01", "2027-01-01"]);
 });
+
+test("half units: 1.5 pages meets a 1-page quota and earns the bonus for the extra half", () => {
+  const act = { ...mengaji, allow_half: true }; // +2 per page above 1
+  const autos = E.deriveAutoEntries({ today: "2026-11-23", activities: [act], entries: [e({ activity_id: "ngaji", date: "2026-11-17", qty: 1.5 })] });
+  assert.deepEqual(autos.map((a) => a.points), [1]);
+});
+
+test("half units: a half page alone does not meet a 1-page quota", () => {
+  const autos = E.deriveAutoEntries({ today: "2026-11-23", activities: [mengaji], entries: [e({ activity_id: "ngaji", date: "2026-11-17", qty: 0.5 })] });
+  assert.deepEqual(autos.map((a) => a.points), [-2]);
+});
+
+test("half units: bonus points are whole numbers, rounded down", () => {
+  const act = { ...mengaji, quota: 3, bonus_per_unit: 1 }; // murajaah style
+  const autos = E.deriveAutoEntries({ today: "2026-11-23", activities: [act], entries: [e({ activity_id: "ngaji", date: "2026-11-17", qty: 4.5 })] });
+  assert.deepEqual(autos.map((a) => a.points), [1]);
+});
+
+test("half units on a simple activity round toward zero", () => {
+  assert.equal(E.entryPoints({ kind: "simple", points: 1 }, { qty: 1.5 }), 1);
+  assert.equal(E.entryPoints({ kind: "simple", points: 2 }, { qty: 1.5 }), 3);
+});

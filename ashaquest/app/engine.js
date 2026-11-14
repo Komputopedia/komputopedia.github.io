@@ -55,7 +55,7 @@ export function entryPoints(activity, entry) {
     return o ? Number(o.points) || 0 : 0;
   }
   const qty = entry.qty == null ? 1 : Number(entry.qty);
-  return Math.round((Number(activity.points) || 0) * qty);
+  return Math.trunc((Number(activity.points) || 0) * qty); // half units never create fractional points
 }
 
 /** Minutes of screen time per local day. Open sessions run until `now`. */
@@ -118,7 +118,7 @@ export function deriveAutoEntries({ today, fromDate, activities = [], entries = 
         const quota = Number(act.quota) || 0;
         let pts = 0;
         if (qty < quota) pts = act.partial ? Math.round((Number(act.penalty) || 0) * (quota - qty) / quota) : Number(act.penalty) || 0;
-        else pts = (qty - quota) * (Number(act.bonus_per_unit) || 0);
+        else pts = Math.trunc((qty - quota) * (Number(act.bonus_per_unit) || 0));
         if (pts !== 0) push({ auto_key: "week:" + act.id + ":" + w, activity_id: act.id, date: sun, qty, points: pts, title: act.name, emoji: act.emoji, category_id: act.category_id });
       }
     }

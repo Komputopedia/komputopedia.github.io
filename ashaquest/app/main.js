@@ -2,12 +2,12 @@
 import { h, render } from "https://esm.sh/preact@10.24.3";
 import { useState, useEffect, useMemo, useCallback, useRef } from "https://esm.sh/preact@10.24.3/hooks";
 import htm from "https://esm.sh/htm@3.1.1";
-import * as E from "./engine.js?v=202611141454";
-import * as A from "./api.js?v=202611141454";
-import { t, locale } from "./i18n.js?v=202611141454";
+import * as E from "./engine.js?v=202611142030";
+import * as A from "./api.js?v=202611142030";
+import { t, locale } from "./i18n.js?v=202611142030";
 
 const html = htm.bind(h);
-const APP_BUILD = "202611141454"; // set by bump-version.sh
+const APP_BUILD = "202611142030"; // set by bump-version.sh
 const VersionTag = () => html`<p class="muted small" style="text-align:center;opacity:.7">Asha Quest v0.2 · build ${APP_BUILD}</p>`;
 
 // ---------- formatting ----------
@@ -17,10 +17,12 @@ const fmtDay = (s, long) => { const [y, m, d] = s.split("-").map(Number); return
 const parseEur = (v) => { const n = Number(String(v).replace(/[€\s]/g, "").replace(",", ".")); return isFinite(n) && n > 0 ? Math.round(n * 100) : null; };
 const mmss = (ms) => { const s = Math.max(0, Math.floor(ms / 1000)); return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0"); };
 const ERR_KEYS = { period_paid: "errPaid", limit_day: "errLimitDay", limit_week: "errLimitWeek", proposals_off: "errProposalsOff",
-  cannot_remove_self: "errRemoveSelf", last_parent: "errLastParent", is_admin: "errIsAdmin", email_taken: "errEmailTaken", username_taken: "errUsernameTaken" };
+  bad_qty: "errBadQty", cannot_remove_self: "errRemoveSelf", last_parent: "errLastParent", is_admin: "errIsAdmin", email_taken: "errEmailTaken", username_taken: "errUsernameTaken" };
 const errText = (e) => { const m = String(e?.message || e); const k = Object.keys(ERR_KEYS).find((x) => m.includes(x)); return k ? t(ERR_KEYS[k]) : t("errGeneric", { m }); };
 const WEEKDAYS = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"];
 const cycleOf = (child) => ({ anchor: child.period_anchor, periodDays: child.period_days });
+/** 1.5 -> "1½", 0.5 -> "½" */
+const fmtQty = (q) => { const n = Number(q) || 0; const w = Math.trunc(n); const half = Math.abs(n - w) >= 0.5; return half ? (w ? w + "½" : "½") : String(w); };
 const amtClass = (n) => (n > 0 ? "pos" : n < 0 ? "neg" : "zero");
 
 function Tag({ status, auto }) {
@@ -228,9 +230,9 @@ function WeeklyCards({ child, v, reload }) {
     ${weekly.map((a) => {
       const qty = v.entries.filter((x) => x.activity_id === a.id && !x.auto_key && (x.status === "approved" || x.status === "pending") && x.date >= lo).reduce((s, x) => s + Number(x.qty || 0), 0);
       const pct = Math.min(100, a.quota ? (qty / a.quota) * 100 : 100);
-      const bonus = Math.max(0, qty - (a.quota || 0)) * (a.bonus_per_unit || 0);
+      const bonus = Math.trunc(Math.max(0, qty - (a.quota || 0)) * (a.bonus_per_unit || 0));
       return html`<div class="week">
-        <div class="row"><span style="font-size:26px">${a.emoji}</span><div class="grow"><b>${a.name}</b><div class="muted small">${qty} / ${a.quota} ${a.unit || ""} · ${qty >= a.quota ? (bonus ? t("weeklyBonus", { p: bonus }) : t("weeklyDone")) : t("weeklyLeft", { n: a.quota - qty, unit: a.unit || "" })}</div></div>
+        <div class="row"><span style="font-size:26px">${a.emoji}</span><div class="grow"><b>${a.name}</b><div class="muted small">${fmtQty(qty)} / ${a.quota} ${a.unit || ""} · ${qty >= a.quota ? (bonus ? t("weeklyBonus", { p: bonus }) : t("weeklyDone")) : t("weeklyLeft", { n: fmtQty(a.quota - qty), unit: a.unit || "" })}</div></div>
           <button class="btn" onClick=${() => setOpen(a)}>${t("logIt")}</button></div>
         <div class="meter ${qty >= a.quota ? "full" : ""}"><div style="width:${pct}%"></div></div></div>`;
     })}
@@ -239,6 +241,7 @@ function WeeklyCards({ child, v, reload }) {
 }
 
 function LogSheet({ act, child, v, onClose, reload, parentUid }) {
+  const step = act.allow_half ? 0.5 : 1;
   const [qty, setQty] = useState(1);
   const [day, setDay] = useState(0);
   const [note, setNote] = useState("");
@@ -254,7 +257,7 @@ function LogSheet({ act, child, v, onClose, reload, parentUid }) {
   });
   return html`<${Sheet} title=${(act.emoji || "") + " " + act.name} onClose=${onClose}>
     ${needsQty ? html`<div class="f"><span class="muted">${t("howMany", { unit: act.unit || "" })}</span>
-      <div class="stepper"><button type="button" aria-label="−" onClick=${() => setQty(Math.max(1, qty - 1))}>−</button><span class="v num">${qty}</span><button type="button" aria-label="+" onClick=${() => setQty(qty + 1)}>+</button></div></div>` : null}
+      <div class="stepper"><button type="button" aria-label="Kurangi" onClick=${() => setQty(Math.max(step, qty - step))}>−</button><span class="v num">${fmtQty(qty)}</span><button type="button" aria-label="Tambah" onClick=${() => setQty(qty + step)}>+</button></div></div>` : null}
     ${act.kind !== "weekly" ? html`<p class="amt ${amtClass(pts)}">${signed(pts) || "0"} poin</p>` : null}
     <div class="seg"><button type="button" aria-pressed=${day === 0} onClick=${() => setDay(0)}>${t("today")}</button><button type="button" aria-pressed=${day === 1} onClick=${() => setDay(1)}>${t("yesterday")}</button></div>
     <label class="f">${t("note")}<input class="in" id="log-note" maxlength="80" value=${note} onInput=${(e) => setNote(e.target.value)} /></label>
@@ -463,7 +466,7 @@ function CheckTab({ S, child, v, reload }) {
     ${days.map((d) => html`<section class="panel"><div class="panel-head"><h2>${fmtDay(d, true)}</h2>
       <button class="btn good sm" disabled=${busy} onClick=${() => approveDay(d)}>${t("approveAll")}</button></div>
       <div class="list">${pend.filter((x) => x.date === d).map((x) => html`<div class="item"><span class="em">${x.emoji}</span>
-        <div class="main"><b>${x.title}${x.outcome_key ? " · " + ((v.acts.find((a) => a.id === x.activity_id)?.outcomes || []).find((o) => o.key === x.outcome_key)?.label || x.outcome_key) : ""}${x.qty ? " · " + x.qty : ""}</b><span>${x.note || ""}</span></div>
+        <div class="main"><b>${x.title}${x.outcome_key ? " · " + ((v.acts.find((a) => a.id === x.activity_id)?.outcomes || []).find((o) => o.key === x.outcome_key)?.label || x.outcome_key) : ""}${x.qty ? " · " + fmtQty(x.qty) : ""}</b><span>${x.note || ""}</span></div>
         <span class="amt ${amtClass(x.points)}">${signed(x.points) || "0"}</span>
         <button class="btn sm good" aria-label=${t("approve")} disabled=${busy} onClick=${() => run(async () => { await A.decideEntry(uid, x, true, {}, v.entries); await reload(); })}>✓</button>
         <button class="btn sm bad" aria-label=${t("reject")} disabled=${busy} onClick=${() => run(async () => { await A.decideEntry(uid, x, false); await reload(); })}>✕</button></div>`)}</div></section>`)}
@@ -541,7 +544,7 @@ function ParentHistory({ S, v, reload }) {
   return html`<section class="panel"><div class="panel-head"><h2>Catatan ${days} hari terakhir</h2>
     <button class="btn ghost sm" onClick=${() => setDays(days === 7 ? 30 : 7)}>${days === 7 ? "30 hari" : "7 hari"}</button></div>
     <div class="list">${rows.length ? rows.map((x) => html`<div class="item"><span class="em">${x.emoji || "⭐"}</span>
-      <div class="main"><b>${x.title}${x.outcome_key ? " · " + x.outcome_key : ""}${x.qty ? " · " + x.qty : ""}</b><span>${fmtDay(x.date)} <${Tag} status=${x.status} auto=${!!x.auto_key} /> ${x.payday_id ? html`<span class="tag info">dibayar</span>` : null}</span></div>
+      <div class="main"><b>${x.title}${x.outcome_key ? " · " + x.outcome_key : ""}${x.qty ? " · " + fmtQty(x.qty) : ""}</b><span>${fmtDay(x.date)} <${Tag} status=${x.status} auto=${!!x.auto_key} /> ${x.payday_id ? html`<span class="tag info">dibayar</span>` : null}</span></div>
       <span class="amt ${amtClass(x.points)}">${signed(x.points) || "0"}</span>
       ${!x.payday_id && x.status === "approved" ? html`<button class="btn sm ghost" disabled=${busy} onClick=${() => run(async () => { await A.setEntryStatus(S.uid, x.id, x.auto_key ? "waived" : "rejected"); await reload(); })}>Batalkan</button>` : null}
       ${!x.payday_id && (x.status === "waived" || x.status === "rejected") ? html`<button class="btn sm ghost" disabled=${busy} onClick=${() => run(async () => { await A.setEntryStatus(S.uid, x.id, "approved"); await reload(); })}>Pulihkan</button>` : null}
@@ -692,6 +695,7 @@ function ActivityEditor({ S, a, cats, reload, onCancel }) {
         <${Stepper} label="Penalti jika kurang" value=${x.penalty} max=${0} onChange=${num("penalty")} />
         <${Stepper} label=${"Bonus per " + (x.unit || "unit") + " di atas minimal"} value=${x.bonus_per_unit} min=${0} onChange=${num("bonus_per_unit")} />
         <label class="check"><input type="checkbox" checked=${x.partial} onChange=${set("partial")} /> Penalti sebagian</label>` : null}
+      ${x.kind === "weekly" || x.unit ? html`<label class="check"><input type="checkbox" checked=${!!x.allow_half} onChange=${set("allow_half")} /> Boleh setengah (½ ${x.unit || "unit"})</label>` : null}
       <${Stepper} label="Urutan" value=${x.sort} min=${0} max=${200} onChange=${num("sort")} />
       <label class="f">Berlaku mulai<input class="in" type="date" value=${x.start_date} onInput=${set("start_date")} /></label>
     </div>

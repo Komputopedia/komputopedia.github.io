@@ -44,6 +44,7 @@ const id = {
   paydaySettings: "Pengaturan gajian", paydayEvery: "Gajian setiap", paydayDay: "Hari gajian", paydayHour: "Jam gajian",
   cycleExplain: "Periode {from}–{to}. Gajian tiap {day} pukul {hour}:00, untuk catatan sampai hari sebelumnya. Kuota mingguan ikut siklus ini.",
   screenAdjust: "Jatah khusus", screenAdjustHint: "Tambah atau kurangi jatah screentime untuk hari ini atau besok saja.",
+  errBadQty: "Jumlah tidak valid. Setengah hanya boleh untuk kegiatan yang mengizinkannya.",
   errRemoveSelf: "Anda tidak bisa menghapus akun sendiri.", errLastParent: "Harus ada minimal satu orang tua.", errIsAdmin: "Akun admin Kids Quest tidak bisa dihapus dari sini.",
   errEmailTaken: "Email ini sudah dipakai akun lain.", errUsernameTaken: "Nama pengguna ini sudah dipakai di keluarga ini.",
   // misc
