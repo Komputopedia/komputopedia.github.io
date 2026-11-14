@@ -40,7 +40,7 @@ const id = {
   errLimitDay: "Kegiatan ini sudah dicatat hari ini.", errLimitWeek: "Jatah usulan minggu ini sudah habis.", errProposalsOff: "Usulan kegiatan sedang ditutup.",
   doneToday: "sudah ✓ hari ini", proposalsLeft: "sisa {n} minggu ini",
   kindJar: "Toples kebaikan", giveStar: "Bintang kebaikan", starHint: "Untuk kebaikan kecil, misalnya mengembalikan sepatu. Bintang tidak bernilai uang.", starWhat: "Kebaikan apa?", give: "Beri bintang",
-  gallery: "Galeri", addPhoto: "+ Foto", uploading: "Mengunggah…", photoCaption: "Keterangan foto (boleh kosong)", noPhotos: "Belum ada foto.",
+  gallery: "Galeri", addPhotoTitle: "Tambah foto", managePhotos: "Lihat & atur {n} foto", addPhoto: "+ Foto", uploading: "Mengunggah…", photoCaption: "Keterangan foto (boleh kosong)", noPhotos: "Belum ada foto.",
   paydaySettings: "Pengaturan gajian", paydayEvery: "Gajian setiap", paydayDay: "Hari gajian", paydayHour: "Jam gajian",
   cycleExplain: "Periode {from}–{to}. Gajian tiap {day} pukul {hour}:00, untuk catatan sampai hari sebelumnya. Kuota mingguan ikut siklus ini.",
   screenAdjust: "Jatah khusus", screenAdjustHint: "Tambah atau kurangi jatah screentime untuk hari ini atau besok saja.",

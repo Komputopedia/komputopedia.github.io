@@ -338,18 +338,45 @@ function KindnessJar({ S, child }) {
     <div class="list">${stars.slice(0, 5).map((x) => html`<div class="item"><span class="em">${x.emoji}</span><div class="main"><b>${x.note}</b><span>${fmtDay(x.date)}</span></div></div>`)}</div></section>`;
 }
 
-function Gallery({ S, child, reload, canDeleteAll }) {
+/** Swipeable photo slideshow; advances by itself every 5 s unless the viewer prefers reduced motion. */
+function Slideshow({ S, child }) {
+  const items = S.media.filter((m) => m.kind === "gallery" && S.urls[m.path] && (!child || !m.child_id || m.child_id === child.id));
+  const track = useRef(null);
+  const [i, setI] = useState(0);
+  const paused = useRef(false);
+  const go = (n) => { const el = track.current; if (!el || !items.length) return; const k = (n + items.length) % items.length; el.scrollTo({ left: k * el.clientWidth, behavior: "smooth" }); };
+  useEffect(() => {
+    if (items.length < 2 || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const t = setInterval(() => { if (!paused.current) go(i + 1); }, 5000);
+    return () => clearInterval(t);
+  }, [i, items.length]);
+  if (!items.length) return null;
+  const onScroll = (e) => { const el = e.currentTarget; const k = Math.round(el.scrollLeft / Math.max(1, el.clientWidth)); if (k !== i) setI(k); };
+  return html`<section class="slideshow" aria-label=${t("gallery")} onPointerDown=${() => (paused.current = true)} onPointerUp=${() => setTimeout(() => (paused.current = false), 4000)}>
+    <div class="slides" ref=${track} onScroll=${onScroll}>
+      ${items.map((m) => html`<figure class="slide" key=${m.id}><img src=${S.urls[m.path]} alt=${m.caption || ""} />${m.caption ? html`<figcaption>${m.caption}</figcaption>` : null}</figure>`)}
+    </div>
+    ${items.length > 1 ? html`
+      <button type="button" class="nav prev" aria-label="Foto sebelumnya" onClick=${() => go(i - 1)}>‹</button>
+      <button type="button" class="nav next" aria-label="Foto berikutnya" onClick=${() => go(i + 1)}>›</button>
+      <div class="dots">${items.map((m, k) => html`<button type="button" aria-label=${"Foto " + (k + 1)} aria-current=${k === i} onClick=${() => go(k)}></button>`)}</div>` : null}
+  </section>`;
+}
+
+function Gallery({ S, child, reload, canDeleteAll, compact }) {
   const [busy, run] = useBusy();
   const [view, setView] = useState(null);
   const [caption, setCaption] = useState("");
   const items = S.media.filter((m) => m.kind === "gallery" && (!child || !m.child_id || m.child_id === child.id));
   const upload = (e) => { const files = [...(e.target.files || [])]; e.target.value = ""; if (!files.length) return;
     run(async () => { for (const f of files) await A.uploadMedia(S.family.id, child?.id, f, "gallery", caption.trim()); setCaption(""); await reload(); }, t("saved")); };
-  return html`<section class="panel"><div class="panel-head"><h2>${t("gallery")}</h2>
+  return html`<section class="panel"><div class="panel-head"><h2>${compact ? t("addPhotoTitle") : t("gallery")}</h2>
       <label class="btn sm" style="cursor:pointer">${busy ? t("uploading") : t("addPhoto")}<input type="file" accept="image/*" multiple hidden onChange=${upload} disabled=${busy} /></label></div>
     <input class="in" placeholder=${t("photoCaption")} value=${caption} onInput=${(e) => setCaption(e.target.value)} />
-    ${items.length ? html`<div class="gallery">${items.map((m) => html`<button type="button" class="ph" onClick=${() => setView(m)}>
-      ${S.urls[m.path] ? html`<img src=${S.urls[m.path]} alt=${m.caption || ""} loading="lazy" />` : null}</button>`)}</div>` : html`<div class="empty">${t("noPhotos")}</div>`}
+    ${!items.length ? html`<div class="empty">${t("noPhotos")}</div>` : compact ? html`<details><summary class="linkbtn">${t("managePhotos", { n: items.length })}</summary>
+      <div class="gallery" style="margin-top:8px">${items.map((m) => html`<button type="button" class="ph" onClick=${() => setView(m)}><img src=${S.urls[m.path]} alt=${m.caption || ""} loading="lazy" /></button>`)}</div></details>`
+      : html`<div class="gallery">${items.map((m) => html`<button type="button" class="ph" onClick=${() => setView(m)}>
+      ${S.urls[m.path] ? html`<img src=${S.urls[m.path]} alt=${m.caption || ""} loading="lazy" />` : null}</button>`)}</div>`}
     ${view && html`<${Sheet} title=${view.caption || t("gallery")} onClose=${() => setView(null)}>
       <img class="ph-big" src=${S.urls[view.path]} alt=${view.caption || ""} />
       <p class="muted small">${new Date(view.created_at).toLocaleDateString(locale, { day: "numeric", month: "long", year: "numeric" })}</p>
@@ -375,6 +402,7 @@ function ChildHome({ S, reload }) {
   return html`<div class="wrap">
     <header class="top"><${Mascot} /><h1>${t("hello", { name: child.name })}<small>${fmtDay(v.today, true)}</small></h1>
       <button class="linkbtn" onClick=${() => A.signOut()}>${t("signOut")}</button></header>
+    <${Slideshow} S=${S} child=${child} />
     <${SavingsHero} S=${S} child=${child} v=${v} />
     <${PrayerStrip} S=${S} child=${child} v=${v} reload=${reload} />
     <${ScreenCard} S=${S} child=${child} v=${v} reload=${reload} />
@@ -383,7 +411,7 @@ function ChildHome({ S, reload }) {
     <${ProposeForm} S=${S} child=${child} v=${v} reload=${reload} />
     <${KindnessJar} S=${S} child=${child} />
     <${SpendForm} S=${S} child=${child} v=${v} reload=${reload} />
-    <${Gallery} S=${S} child=${child} reload=${reload} />
+    <${Gallery} S=${S} child=${child} reload=${reload} compact=${true} />
     <${History} v=${v} canDeletePending=${true} reload=${reload} />
   </div>`;
 }
@@ -409,7 +437,7 @@ function ParentHome({ S, reload }) {
     ${child && tab === "money" ? html`<${MoneyTab} key=${child.id} S=${S} child=${child} v=${v} reload=${reload} />` : null}
     ${child && tab === "rules" ? html`<${RulesTab} key=${child.id} S=${S} child=${child} v=${v} reload=${reload} />` : null}
     ${child && tab === "screen" ? html`<${ScreenTab} key=${child.id} S=${S} child=${child} v=${v} reload=${reload} />` : null}
-    ${tab === "gallery" ? html`<${Gallery} S=${S} child=${null} reload=${reload} canDeleteAll=${true} />` : null}
+    ${tab === "gallery" ? html`<${Slideshow} S=${S} child=${null} /><${Gallery} S=${S} child=${null} reload=${reload} canDeleteAll=${true} />` : null}
     ${tab === "family" ? html`<${FamilyTab} key=${child?.id} S=${S} child=${child} reload=${reload} />` : null}
     ${tab === "admin" ? html`<${AdminTab} S=${S} reload=${reload} />` : null}
   </div>`;
