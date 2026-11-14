@@ -7,6 +7,11 @@ const PUBLISHABLE_KEY = "sb_publishable_E_Ffj6dlK78QeMOHKYp6gA_YIZhCxKv"; // saf
 export const sb = createClient(SUPABASE_URL, PUBLISHABLE_KEY, { auth: { persistSession: true, autoRefreshToken: true } });
 
 export const childEmail = (code, username) => `${username}.${code}@kids.kidsquest.app`;
+const BUCKET = "family-media";
+
+/** Screen settings for the engine, with this child's per-day adjustments. */
+export const screenFor = (state, child) => child.screen?.enabled === false ? null
+  : { ...child.screen, start_date: child.start_date, adjust: Object.fromEntries((state.adjust || []).filter((a) => a.child_id === child.id).map((a) => [a.date, a.minutes])) };
 
 async function must(q) {
   const r = await q;
@@ -33,7 +38,7 @@ export async function loadAll() {
   const isAdmin = (await must(sb.from("platform_admins").select("user_id").eq("user_id", uid))).length > 0;
   if (!me) return { uid, me: null, isAdmin };
   const since = E.addDays(E.localDate(new Date(), "Europe/Amsterdam"), -120);
-  const [family, members, children, categories, activities, entries, money, paydays, sessions, excused, templates] = await Promise.all([
+  const [family, members, children, categories, activities, entries, money, paydays, sessions, excused, templates, stars, adjust, media] = await Promise.all([
     must(sb.from("families").select("*").eq("id", me.family_id).single()),
     must(sb.from("members").select("user_id,role,child_id,display_name").eq("family_id", me.family_id)),
     must(sb.from("children").select("*").eq("family_id", me.family_id).order("sort")),
@@ -45,8 +50,17 @@ export async function loadAll() {
     must(sb.from("screen_sessions").select("*").eq("family_id", me.family_id).gte("started_at", new Date(Date.now() - 40 * 864e5).toISOString()).order("started_at", { ascending: false })),
     must(sb.from("excused_days").select("*").eq("family_id", me.family_id)),
     must(sb.from("templates").select("*").order("created_at", { ascending: false })),
+    must(sb.from("stars").select("*").eq("family_id", me.family_id).order("created_at", { ascending: false }).limit(500)),
+    must(sb.from("screen_adjust").select("*").eq("family_id", me.family_id).gte("date", since)),
+    must(sb.from("media").select("*").eq("family_id", me.family_id).order("created_at", { ascending: false }).limit(300)),
   ]);
-  return { uid, me, isAdmin, family, members, children, categories, activities, entries, money, paydays, sessions, excused, templates };
+  const paths = [...media.map((m) => m.path), ...children.map((c) => c.background_path).filter(Boolean)];
+  const urls = {};
+  if (paths.length) {
+    const r = await sb.storage.from(BUCKET).createSignedUrls([...new Set(paths)], 6 * 3600);
+    for (const x of r.data || []) if (x.signedUrl) urls[x.path] = x.signedUrl;
+  }
+  return { uid, me, isAdmin, family, members, children, categories, activities, entries, money, paydays, sessions, excused, templates, stars, adjust, media, urls };
 }
 
 // ---------- child actions ----------
@@ -94,8 +108,7 @@ export async function materializeAutos(state, child, today) {
     entries: state.entries.filter((x) => x.child_id === child.id),
     excused: child.excused_enabled ? state.excused.filter((x) => x.child_id === child.id).map((x) => x.date) : [],
     sessions: state.sessions.filter((s) => s.child_id === child.id),
-    screen: child.screen?.enabled === false ? null : { ...child.screen, start_date: child.start_date },
-    tz: state.family.timezone,
+    screen: screenFor(state, child), tz: state.family.timezone, weekAnchor: child.period_anchor,
   });
   if (!autos.length) return 0;
   await must(sb.from("entries").upsert(autos.map((a) => ({
@@ -150,4 +163,36 @@ export async function accounts(body) {
     throw new Error(code);
   }
   return data;
+}
+
+// ---------- kindness stars ----------
+export const addStar = (childId, { note, emoji, date }) => must(sb.from("stars").insert({ child_id: childId, note, emoji, date }));
+export const deleteStar = (id) => must(sb.from("stars").delete().eq("id", id));
+
+// ---------- screen limit adjustment for one day ----------
+export const setScreenAdjust = (childId, date, minutes) => minutes
+  ? must(sb.from("screen_adjust").upsert({ child_id: childId, date, minutes }, { onConflict: "child_id,date" }))
+  : must(sb.from("screen_adjust").delete().eq("child_id", childId).eq("date", date));
+
+// ---------- photos ----------
+/** Shrink an image to at most `max` px on the long side, as JPEG, before upload. */
+export async function shrinkImage(file, max = 1600) {
+  const bmp = await createImageBitmap(file);
+  const scale = Math.min(1, max / Math.max(bmp.width, bmp.height));
+  const c = document.createElement("canvas");
+  c.width = Math.round(bmp.width * scale); c.height = Math.round(bmp.height * scale);
+  c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height);
+  return await new Promise((res, rej) => c.toBlob((b) => (b ? res(b) : rej(new Error("image"))), "image/jpeg", 0.82));
+}
+export async function uploadMedia(familyId, childId, file, kind, caption) {
+  const blob = await shrinkImage(file, kind === "background" ? 2000 : 1600);
+  const path = `${familyId}/${kind}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.jpg`;
+  const up = await sb.storage.from(BUCKET).upload(path, blob, { contentType: "image/jpeg" });
+  if (up.error) throw up.error;
+  await must(sb.from("media").insert({ family_id: familyId, child_id: childId || null, kind, path, caption: caption || null }));
+  return path;
+}
+export async function deleteMedia(m) {
+  await sb.storage.from(BUCKET).remove([m.path]);
+  await must(sb.from("media").delete().eq("id", m.id));
 }

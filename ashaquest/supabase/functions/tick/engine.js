@@ -12,6 +12,8 @@ export function addDays(s, n) { return dayStr(dayNum(s) + n); }
 export function weekday(s) { return ((dayNum(s) + 3) % 7 + 7) % 7 + 1; }
 export function weekStart(s) { return addDays(s, 1 - weekday(s)); }
 export function isWeekend(s) { return weekday(s) >= 6; }
+/** Start of the 7-day week containing `s`, for weeks that begin on the anchor's weekday. */
+export function weekStartFrom(s, anchor) { return addDays(s, -((((dayNum(s) - dayNum(anchor)) % 7) + 7) % 7)); }
 
 /** Local calendar date of an instant in a time zone. */
 export function localDate(instant, tz) {
@@ -75,14 +77,19 @@ export function screenMinutesByDay(sessions, tz, now) {
   return out;
 }
 
-export function screenLimit(screen, day) { return isWeekend(day) ? screen.weekendLimitMin : screen.weekdayLimitMin; }
+/** Daily screen limit, including a parent's adjustment for that day. */
+export function screenLimit(screen, day) { return (isWeekend(day) ? screen.weekendLimitMin : screen.weekdayLimitMin) + (Number(screen.adjust?.[day]) || 0); }
+
+/** Logged (not automatic, not rejected) entries of an activity on a day, for daily limits. */
+export function countToday(entries, activityId, day) { return entries.filter((x) => x.activity_id === activityId && x.date === day && !x.auto_key && LIVE.has(x.status)).length; }
 
 /**
  * Automatic entries for closed days and weeks that do not exist yet.
  * Closed means strictly before `today`. `fromDate` bounds how far back to look
  * (callers pass the day after the last paid period, so paid periods are never touched).
  */
-export function deriveAutoEntries({ today, fromDate, activities = [], entries = [], excused = [], sessions = [], screen = null, tz = "Europe/Amsterdam" }) {
+export function deriveAutoEntries({ today, fromDate, activities = [], entries = [], excused = [], sessions = [], screen = null, tz = "Europe/Amsterdam", weekAnchor = null }) {
+  const wk = (d) => (weekAnchor ? weekStartFrom(d, weekAnchor) : weekStart(d));
   const lastClosed = addDays(today, -1);
   const have = new Set(entries.filter((x) => x.auto_key).map((x) => x.auto_key));
   const exc = new Set(excused);
@@ -103,9 +110,10 @@ export function deriveAutoEntries({ today, fromDate, activities = [], entries = 
       }
     }
     if (act.kind === "weekly") {
-      for (let w = weekStart(start) < start ? addDays(weekStart(start), 7) : weekStart(start); addDays(w, 6) <= lastClosed; w = addDays(w, 7)) {
+      for (let w = wk(start); addDays(w, 6) <= lastClosed; w = addDays(w, 7)) {
         const sun = addDays(w, 6);
-        const qty = entries.filter((x) => x.activity_id === act.id && !x.auto_key && LIVE.has(x.status) && x.date >= w && x.date <= sun)
+        const lo = w > start ? w : start; // a partial first week counts from the start date
+        const qty = entries.filter((x) => x.activity_id === act.id && !x.auto_key && LIVE.has(x.status) && x.date >= lo && x.date <= sun)
           .reduce((s, x) => s + (Number(x.qty) || 0), 0);
         const quota = Number(act.quota) || 0;
         let pts = 0;
@@ -123,9 +131,9 @@ export function deriveAutoEntries({ today, fromDate, activities = [], entries = 
       const over = (mins[d] || 0) - screenLimit(screen, d);
       if (over > 0) push({ auto_key: "st-over:" + d, date: d, points: Math.ceil(over / screen.overBlockMin) * screen.overPenalty, title: "Screentime lebih", emoji: "⏰", kind: "screen" });
     }
-    for (let w = weekStart(start) < start ? addDays(weekStart(start), 7) : weekStart(start); addDays(w, 6) <= lastClosed; w = addDays(w, 7)) {
+    for (let w = wk(start); addDays(w, 6) <= lastClosed; w = addDays(w, 7)) {
       let left = 0;
-      for (let i = 0; i < 7; i++) { const d = addDays(w, i); left += Math.max(0, screenLimit(screen, d) - (mins[d] || 0)); }
+      for (let i = 0; i < 7; i++) { const d = addDays(w, i); if (d >= start) left += Math.max(0, screenLimit(screen, d) - (mins[d] || 0)); }
       const pts = Math.floor(left / screen.leftoverBlockMin) * screen.leftoverPointsPerBlock;
       if (pts > 0) push({ auto_key: "st-left:" + w, date: addDays(w, 6), qty: left, points: pts, title: "Hemat screentime", emoji: "🌤️", kind: "screen" });
     }

@@ -161,3 +161,45 @@ test("allowance dates: weekly on a weekday, monthly on a day of month", () => {
   assert.deepEqual(E.allowanceDates({ freq: "weekly", weekday: 1, start_date: "2026-11-16" }, "2026-11-10", "2026-11-30"), ["2026-11-16", "2026-11-23", "2026-11-30"]);
   assert.deepEqual(E.allowanceDates({ freq: "monthly", monthday: 1, start_date: "2026-11-16" }, "2026-11-01", "2027-01-15"), ["2026-12-01", "2027-01-01"]);
 });
+
+// ---- round 2: weeks follow the payday cycle ----
+test("week start follows the cycle anchor (Friday cycle)", () => {
+  assert.equal(E.weekStartFrom("2026-11-19", "2026-11-13"), "2026-11-13"); // Thursday -> Friday before
+  assert.equal(E.weekStartFrom("2026-11-20", "2026-11-13"), "2026-11-20"); // Friday
+  assert.equal(E.weekStartFrom("2026-11-10", "2026-11-13"), "2026-11-06"); // before the anchor
+});
+
+test("weekly obligation uses the cycle week and counts a partial first week", () => {
+  const act = { ...mengaji, quota: 1, penalty: -5, start_date: "2026-11-14" };
+  // cycle Fri 13 - Thu 19; child starts Sat 14; the week closes when Friday 20 begins
+  assert.equal(E.deriveAutoEntries({ today: "2026-11-19", weekAnchor: "2026-11-13", activities: [act], entries: [] }).length, 0);
+  const autos = E.deriveAutoEntries({ today: "2026-11-20", weekAnchor: "2026-11-13", activities: [act], entries: [] });
+  assert.deepEqual(autos.map((a) => [a.auto_key, a.points, a.date]), [["week:ngaji:2026-11-13", -5, "2026-11-19"]]);
+});
+
+test("entries before the start date do not count toward a partial week", () => {
+  const act = { ...mengaji, start_date: "2026-11-14" };
+  const autos = E.deriveAutoEntries({ today: "2026-11-20", weekAnchor: "2026-11-13", activities: [act], entries: [e({ activity_id: "ngaji", date: "2026-11-13", qty: 5 })] });
+  assert.deepEqual(autos.map((a) => a.points), [-2]);
+});
+
+test("a parent adjustment changes that day's screen limit", () => {
+  const scr = { ...screen, adjust: { "2026-11-16": 30 } };
+  assert.equal(E.screenLimit(scr, "2026-11-16"), 90);
+  assert.equal(E.screenLimit(scr, "2026-11-17"), 60);
+  const sessions = [{ started_at: "2026-11-16T15:00:00Z", ended_at: "2026-11-16T16:20:00Z" }]; // 80 min, limit 90
+  const autos = E.deriveAutoEntries({ today: "2026-11-17", activities: [], entries: [], sessions, screen: scr, tz: "Europe/Amsterdam" });
+  assert.equal(autos.length, 0);
+});
+
+test("screen leftover in a partial first week counts only days from the start", () => {
+  const scr = { ...screen, start_date: "2026-11-18" }; // Wed; Monday-anchored week 16-22
+  const autos = E.deriveAutoEntries({ today: "2026-11-23", activities: [], entries: [], sessions: [], screen: scr, tz: "Europe/Amsterdam" });
+  // Wed-Fri 3x60 + Sat-Sun 2x120 = 420 min = 14 blocks
+  assert.equal(autos.find((a) => a.auto_key === "st-left:2026-11-16").points, 14);
+});
+
+test("entries logged today for an activity are counted for the daily limit", () => {
+  const entries = [e({ activity_id: "kamar", date: "2026-11-16" }), e({ activity_id: "kamar", date: "2026-11-16", status: "rejected" })];
+  assert.equal(E.countToday(entries, "kamar", "2026-11-16"), 1);
+});

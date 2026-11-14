@@ -9,7 +9,8 @@ const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SE
 function localHour(tz: string) {
   return Number(new Intl.DateTimeFormat("en-GB", { timeZone: tz, hour: "2-digit", hourCycle: "h23" }).format(new Date()));
 }
-const screenCfg = (c: any) => c.screen?.enabled === false ? null : { ...c.screen, start_date: c.start_date };
+const screenCfg = (c: any, adj: any[]) => c.screen?.enabled === false ? null
+  : { ...c.screen, start_date: c.start_date, adjust: Object.fromEntries(adj.map((x: any) => [x.date, x.minutes])) };
 
 async function tickChild(f: any, c: any, today: string, log: string[]) {
   // 1. forgotten timers stop at 23:59 of the day they started
@@ -28,15 +29,16 @@ async function tickChild(f: any, c: any, today: string, log: string[]) {
   let from = E.addDays(today, -45);
   if (lastPaid && E.addDays(lastPaid, 1) > from) from = E.addDays(lastPaid, 1);
   if (c.start_date > from) from = c.start_date;
-  const [acts, ents, sess, exc] = await Promise.all([
+  const [acts, ents, sess, exc, adj] = await Promise.all([
     db.from("activities").select("*").eq("child_id", c.id),
     db.from("entries").select("id,activity_id,date,status,qty,auto_key").eq("child_id", c.id).gte("date", E.addDays(from, -7)),
     db.from("screen_sessions").select("started_at,ended_at").eq("child_id", c.id).gte("started_at", new Date(E.localMidnight(E.addDays(from, -1), f.timezone)).toISOString()),
     c.excused_enabled ? db.from("excused_days").select("date").eq("child_id", c.id) : Promise.resolve({ data: [] }),
+    db.from("screen_adjust").select("date,minutes").eq("child_id", c.id).gte("date", from),
   ]);
   const autos = E.deriveAutoEntries({
     today, fromDate: from, activities: acts.data || [], entries: ents.data || [],
-    excused: (exc.data || []).map((x: any) => x.date), sessions: sess.data || [], screen: screenCfg(c), tz: f.timezone,
+    excused: (exc.data || []).map((x: any) => x.date), sessions: sess.data || [], screen: screenCfg(c, adj.data || []), tz: f.timezone, weekAnchor: c.period_anchor,
   });
   if (autos.length) {
     const rows = autos.map((a: any) => ({
@@ -50,7 +52,7 @@ async function tickChild(f: any, c: any, today: string, log: string[]) {
 
   // 3. allowance
   const al = c.allowance || {};
-  if (al.enabled && al.cents > 0) {
+  if (al.enabled && al.cents > 0 && al.mode !== "payday") {
     const cat = (await db.from("categories").select("id").eq("family_id", f.id).eq("kind", "income").eq("name", "Uang saku").maybeSingle()).data;
     const dates = E.allowanceDates({ ...al, start_date: al.start_date || c.start_date }, E.addDays(today, -14), today);
     if (dates.length) {
@@ -61,14 +63,15 @@ async function tickChild(f: any, c: any, today: string, log: string[]) {
     }
   }
 
-  // 4. payday for the period that just ended (from 06:00 local on payday)
-  const cur = E.periodOf(today, { anchor: f.period_anchor, periodDays: f.period_days });
+  // 4. payday for the period that just ended, from the child's payday hour on payday
+  const cyc = { anchor: c.period_anchor, periodDays: c.period_days };
+  const cur = E.periodOf(today, cyc);
   const prevEnd = E.addDays(cur.start, -1);
-  const prev = E.periodOf(prevEnd, { anchor: f.period_anchor, periodDays: f.period_days });
-  if (prev.index < 0 || prevEnd < c.start_date || f.payday_mode === "manual" || localHour(f.timezone) < 6) return;
+  const prev = E.periodOf(prevEnd, cyc);
+  if (prevEnd < c.start_date || c.payday_mode === "manual" || localHour(f.timezone) < (c.payday_hour ?? 6)) return;
   const pd = (await db.from("paydays").select("*").eq("child_id", c.id).eq("period_end", prevEnd).maybeSingle()).data;
   if (pd?.status === "paid") return;
-  if (f.payday_mode === "auto") {
+  if (c.payday_mode === "auto") {
     const r = await db.rpc("pay_child", { p_child: c.id, p_upto: prevEnd });
     log.push(`${c.username}: auto payday ${prevEnd} ${r.error ? "failed: " + r.error.message : "paid"}`);
   } else if (!pd) {

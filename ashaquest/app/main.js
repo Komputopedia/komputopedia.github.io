@@ -14,7 +14,10 @@ const signed = (n) => (n > 0 ? "+" : n < 0 ? "−" : "") + Math.abs(n);
 const fmtDay = (s, long) => { const [y, m, d] = s.split("-").map(Number); return new Date(y, m - 1, d).toLocaleDateString(locale, long ? { weekday: "long", day: "numeric", month: "long" } : { weekday: "short", day: "numeric", month: "short" }); };
 const parseEur = (v) => { const n = Number(String(v).replace(/[€\s]/g, "").replace(",", ".")); return isFinite(n) && n > 0 ? Math.round(n * 100) : null; };
 const mmss = (ms) => { const s = Math.max(0, Math.floor(ms / 1000)); return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0"); };
-const errText = (e) => { const m = String(e?.message || e); return m.includes("period_paid") ? t("errPaid") : t("errGeneric", { m }); };
+const ERR_KEYS = { period_paid: "errPaid", limit_day: "errLimitDay", limit_week: "errLimitWeek", proposals_off: "errProposalsOff" };
+const errText = (e) => { const m = String(e?.message || e); const k = Object.keys(ERR_KEYS).find((x) => m.includes(x)); return k ? t(ERR_KEYS[k]) : t("errGeneric", { m }); };
+const WEEKDAYS = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"];
+const cycleOf = (child) => ({ anchor: child.period_anchor, periodDays: child.period_days });
 const amtClass = (n) => (n > 0 ? "pos" : n < 0 ? "neg" : "zero");
 
 function Tag({ status, auto }) {
@@ -23,9 +26,25 @@ function Tag({ status, auto }) {
   return html`<span class="tag ${cls}">${t("st_" + status)}</span>`;
 }
 
-const Mascot = ({ size = 56 }) => html`<svg width=${size} height=${Math.round(size * 0.78)} viewBox="0 0 64 50" aria-hidden="true">
-  <path d="M15 46c-8 0-11-7-7-12-3-7 4-14 11-11 2-9 15-11 19-3 7-5 18 1 15 10 7 4 5 16-4 16z" fill="#fff" stroke="#b9d8f3" stroke-width="2"/>
-  <circle cx="51" cy="9" r="5" fill="#ffd66b"/></svg>`;
+// Faceless cloud with a little rainbow and sparkles.
+const Mascot = ({ size = 56 }) => html`<svg width=${size} height=${Math.round(size * 0.86)} viewBox="0 0 72 62" aria-hidden="true">
+  <defs><linearGradient id="kqc" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#e3f1ff"/></linearGradient></defs>
+  <path d="M14 34a20 20 0 0 1 40-6" fill="none" stroke="#ffb3c9" stroke-width="4" stroke-linecap="round"/>
+  <path d="M19 34a15 15 0 0 1 30-4" fill="none" stroke="#ffe08a" stroke-width="4" stroke-linecap="round"/>
+  <path d="M24 34a10 10 0 0 1 20-2" fill="none" stroke="#a9dcff" stroke-width="4" stroke-linecap="round"/>
+  <path d="M17 58c-8 0-12-6-9-12-5-5-1-14 7-13 1-9 12-13 19-7 4-7 16-7 19 2 8-1 13 7 9 13 6 3 4 17-6 17z" fill="url(#kqc)" stroke="#a9cdee" stroke-width="2.2" stroke-linejoin="round"/>
+  <path d="M60 8l1.6 3.4L65 13l-3.4 1.6L60 18l-1.6-3.4L55 13l3.4-1.6z" fill="#ffd66b"/>
+  <circle cx="9" cy="16" r="2.2" fill="#ffb3c9"/><circle cx="66" cy="30" r="1.8" fill="#a9dcff"/></svg>`;
+
+/** Number input without the keyboard: − value + buttons. */
+function Stepper({ value, onChange, step = 1, min = -999, max = 999, label, suffix }) {
+  const v = Number(value) || 0;
+  const set = (n) => onChange(Math.max(min, Math.min(max, n)));
+  return html`<div class="f"><span class="muted small" style="font-weight:800">${label}</span>
+    <div class="stepper sm"><button type="button" aria-label=${(label || "") + " kurangi"} onClick=${() => set(v - step)}>−</button>
+      <span class="v num">${v > 0 && min < 0 ? "+" : ""}${v}${suffix ? html`<small> ${suffix}</small>` : null}</span>
+      <button type="button" aria-label=${(label || "") + " tambah"} onClick=${() => set(v + step)}>+</button></div></div>`;
+}
 
 // ---------- toast + sheet ----------
 let showToast = () => {};
@@ -50,12 +69,14 @@ function useBusy() {
 function childView(S, child) {
   const tz = S.family.timezone;
   const today = E.localDate(new Date(), tz);
-  const period = E.periodOf(today, { anchor: S.family.period_anchor, periodDays: S.family.period_days });
+  const period = E.periodOf(today, cycleOf(child));
   const entries = S.entries.filter((x) => x.child_id === child.id);
   const money = S.money.filter((x) => x.child_id === child.id);
   const acts = S.activities.filter((a) => a.child_id === child.id).sort((a, b) => a.sort - b.sort);
   const sessions = S.sessions.filter((s) => s.child_id === child.id);
-  return { tz, today, period, entries, money, acts, sessions, balance: E.balance(money), sum: E.summarize(entries, period.start, period.end) };
+  const from = period.start > child.start_date ? period.start : child.start_date;
+  return { tz, today, period, entries, money, acts, sessions, screen: A.screenFor(S, child), weekStart: E.weekStartFrom(today, child.period_anchor),
+    balance: E.balance(money), sum: E.summarize(entries, from, period.end) };
 }
 
 // =====================================================================
@@ -103,7 +124,7 @@ function SavingsHero({ S, child, v }) {
     <div class="money ${debt ? "debt" : ""}">
       <span class="lbl">${debt ? t("debt") : t("savings")}</span>
       <span class="big num">${eur(Math.abs(v.balance))}</span>
-      <span class="lbl">${t("payday", { date: fmtDay(v.period.payday, true) })}</span>
+      <span class="lbl">${t("payday", { date: fmtDay(v.period.payday, true) + ", " + String(child.payday_hour ?? 6).padStart(2, "0") + ":00" })}</span>
     </div>
     <div class="points">
       <span class="lbl">${t("points")}</span>
@@ -116,7 +137,7 @@ function SavingsHero({ S, child, v }) {
 }
 
 function ScreenCard({ S, child, v, reload }) {
-  const cfg = child.screen || {};
+  const cfg = v.screen || { enabled: false };
   const devices = S.categories.filter((c) => c.kind === "screen" && c.active);
   const open = v.sessions.find((s) => !s.ended_at);
   const [now, setNow] = useState(Date.now());
@@ -198,11 +219,12 @@ function WeeklyCards({ child, v, reload }) {
   const weekly = v.acts.filter((a) => a.kind === "weekly" && a.active);
   const [open, setOpen] = useState(null);
   if (!weekly.length) return null;
-  const ws = E.weekStart(v.today);
+  const ws = v.weekStart;
+  const lo = ws > child.start_date ? ws : child.start_date;
   return html`<section class="panel">
     <div class="panel-head"><h2>${t("weekly")}</h2><span class="muted">${fmtDay(ws)} – ${fmtDay(E.addDays(ws, 6))}</span></div>
     ${weekly.map((a) => {
-      const qty = v.entries.filter((x) => x.activity_id === a.id && !x.auto_key && (x.status === "approved" || x.status === "pending") && x.date >= ws).reduce((s, x) => s + Number(x.qty || 0), 0);
+      const qty = v.entries.filter((x) => x.activity_id === a.id && !x.auto_key && (x.status === "approved" || x.status === "pending") && x.date >= lo).reduce((s, x) => s + Number(x.qty || 0), 0);
       const pct = Math.min(100, a.quota ? (qty / a.quota) * 100 : 100);
       const bonus = Math.max(0, qty - (a.quota || 0)) * (a.bonus_per_unit || 0);
       return html`<div class="week">
@@ -246,8 +268,10 @@ function ActivityTiles({ S, child, v, reload }) {
   const groups = [...cats.map((c) => [c, list.filter((a) => a.category_id === c.id)]), [{ id: null, name: "Lainnya" }, list.filter((a) => !cats.some((c) => c.id === a.category_id))]].filter(([, xs]) => xs.length);
   return html`<section class="panel"><h2>${t("activities")}</h2>
     ${groups.map(([c, xs]) => html`<div class="cat-title">${c.emoji || ""} ${c.name}</div>
-      <div class="tiles">${xs.map((a) => html`<button type="button" class="tile ${a.points < 0 ? "neg" : ""}" onClick=${() => setOpen(a)}>
-        <span class="em">${a.emoji || "⭐"}</span><span class="nm">${a.name}</span><span class="pt">${signed(a.points)}${a.unit ? " / " + a.unit : ""}</span></button>`)}</div>`)}
+      <div class="tiles">${xs.map((a) => { const full = a.max_per_day && E.countToday(v.entries, a.id, v.today) >= a.max_per_day;
+        return html`<button type="button" class="tile ${a.points < 0 ? "neg" : ""} ${full ? "done" : ""}" disabled=${full} onClick=${() => setOpen(a)}>
+        <span class="em">${a.emoji || "⭐"}</span><span class="nm">${a.name}</span>
+        <span class="pt">${full ? t("doneToday") : signed(a.points) + (a.unit ? " / " + a.unit : "")}</span></button>`; })}</div>`)}
     ${open && html`<${LogSheet} act=${open} child=${child} v=${v} onClose=${() => setOpen(null)} reload=${reload} />`}
   </section>`;
 }
@@ -256,14 +280,18 @@ function ProposeForm({ S, child, v, reload }) {
   const cats = S.categories.filter((c) => c.kind === "activity" && c.active);
   const [f, setF] = useState({ title: "", points: 1, category_id: cats[0]?.id || "", day: 0 });
   const [busy, run] = useBusy();
-  const submit = (e) => { e.preventDefault(); if (!f.title.trim()) return;
+  const cfg = child.proposals || { enabled: true, perWeek: 2 };
+  if (cfg.enabled === false) return null;
+  const used = v.entries.filter((x) => x.source === "proposal" && x.date >= v.weekStart && x.date <= E.addDays(v.weekStart, 6)).length;
+  const left = Math.max(0, (cfg.perWeek ?? 2) - used);
+  const submit = (e) => { e.preventDefault(); if (!f.title.trim() || !left) return;
     run(async () => { await A.proposeEntry(child.id, { title: f.title.trim(), category_id: f.category_id || null, requested_points: Math.max(1, Number(f.points) || 1), date: E.addDays(v.today, -f.day) }); setF({ ...f, title: "", points: 1 }); await reload(); }, t("sentWait")); };
-  return html`<section class="panel"><h2>${t("propose")}</h2><p class="muted">${t("proposeHint")}</p>
+  return html`<section class="panel"><div class="panel-head"><h2>${t("propose")}</h2><span class="tag ${left ? "info" : "no"}">${t("proposalsLeft", { n: left })}</span></div><p class="muted">${t("proposeHint")}</p>
     <form class="form" onSubmit=${submit}>
       <label class="f full">${t("whatDid")}<input class="in" id="pr-title" maxlength="60" value=${f.title} onInput=${(e) => setF({ ...f, title: e.target.value })} required /></label>
       <label class="f">${t("category")}<select class="in" id="pr-cat" value=${f.category_id} onChange=${(e) => setF({ ...f, category_id: e.target.value })}>${cats.map((c) => html`<option value=${c.id}>${c.emoji} ${c.name}</option>`)}</select></label>
-      <label class="f">${t("askPoints")}<input class="in" id="pr-pts" type="number" min="1" max="50" value=${f.points} onInput=${(e) => setF({ ...f, points: e.target.value })} /></label>
-      <div class="full"><button class="btn" disabled=${busy}>${t("send")}</button></div>
+      <${Stepper} label=${t("askPoints")} value=${f.points} min=${1} max=${20} onChange=${(n) => setF({ ...f, points: n })} />
+      <div class="full"><button class="btn" disabled=${busy || !left}>${t("send")}</button></div>
     </form></section>`;
 }
 
@@ -302,9 +330,47 @@ function History({ v, canDeletePending, reload, limit = 25 }) {
       ${r.del ? html`<button class="btn sm ghost" disabled=${busy} onClick=${() => run(async () => { await r.del(); await reload(); })}>${t("remove")}</button>` : null}</div>`) : html`<div class="empty">${t("noHistory")}</div>`}</div></section>`;
 }
 
+function KindnessJar({ S, child }) {
+  const stars = S.stars.filter((x) => x.child_id === child.id);
+  if (!stars.length) return null;
+  return html`<section class="panel jar"><div class="panel-head"><h2>${t("kindJar")}</h2><span class="jar-count num">${stars.length} ⭐</span></div>
+    <div class="jar-stars" aria-hidden="true">${stars.slice(0, 40).map((x) => html`<span>${x.emoji || "⭐"}</span>`)}</div>
+    <div class="list">${stars.slice(0, 5).map((x) => html`<div class="item"><span class="em">${x.emoji}</span><div class="main"><b>${x.note}</b><span>${fmtDay(x.date)}</span></div></div>`)}</div></section>`;
+}
+
+function Gallery({ S, child, reload, canDeleteAll }) {
+  const [busy, run] = useBusy();
+  const [view, setView] = useState(null);
+  const [caption, setCaption] = useState("");
+  const items = S.media.filter((m) => m.kind === "gallery" && (!child || !m.child_id || m.child_id === child.id));
+  const upload = (e) => { const files = [...(e.target.files || [])]; e.target.value = ""; if (!files.length) return;
+    run(async () => { for (const f of files) await A.uploadMedia(S.family.id, child?.id, f, "gallery", caption.trim()); setCaption(""); await reload(); }, t("saved")); };
+  return html`<section class="panel"><div class="panel-head"><h2>${t("gallery")}</h2>
+      <label class="btn sm" style="cursor:pointer">${busy ? t("uploading") : t("addPhoto")}<input type="file" accept="image/*" multiple hidden onChange=${upload} disabled=${busy} /></label></div>
+    <input class="in" placeholder=${t("photoCaption")} value=${caption} onInput=${(e) => setCaption(e.target.value)} />
+    ${items.length ? html`<div class="gallery">${items.map((m) => html`<button type="button" class="ph" onClick=${() => setView(m)}>
+      ${S.urls[m.path] ? html`<img src=${S.urls[m.path]} alt=${m.caption || ""} loading="lazy" />` : null}</button>`)}</div>` : html`<div class="empty">${t("noPhotos")}</div>`}
+    ${view && html`<${Sheet} title=${view.caption || t("gallery")} onClose=${() => setView(null)}>
+      <img class="ph-big" src=${S.urls[view.path]} alt=${view.caption || ""} />
+      <p class="muted small">${new Date(view.created_at).toLocaleDateString(locale, { day: "numeric", month: "long", year: "numeric" })}</p>
+      ${canDeleteAll || view.created_by === S.uid ? html`<button class="btn ghost" disabled=${busy} onClick=${() => run(async () => { await A.deleteMedia(view); setView(null); await reload(); })}>${t("remove")}</button>` : null}
+    </${Sheet}>`}
+  </section>`;
+}
+
+function useBackground(S, child) {
+  const url = child?.background_path ? S.urls[child.background_path] : null;
+  useEffect(() => {
+    document.body.style.backgroundImage = url ? `linear-gradient(rgba(220,239,255,.35), rgba(220,239,255,.55)), url("${url}")` : "";
+    document.body.classList.toggle("has-bg", !!url);
+    return () => { document.body.style.backgroundImage = ""; document.body.classList.remove("has-bg"); };
+  }, [url]);
+}
+
 function ChildHome({ S, reload }) {
   const child = S.children.find((c) => c.id === S.me.child_id);
   if (!child) return html`<div class="wrap"><div class="empty">${t("noFamily")}</div></div>`;
+  useBackground(S, child);
   const v = childView(S, child);
   return html`<div class="wrap">
     <header class="top"><${Mascot} /><h1>${t("hello", { name: child.name })}<small>${fmtDay(v.today, true)}</small></h1>
@@ -315,7 +381,9 @@ function ChildHome({ S, reload }) {
     <${WeeklyCards} child=${child} v=${v} reload=${reload} />
     <${ActivityTiles} S=${S} child=${child} v=${v} reload=${reload} />
     <${ProposeForm} S=${S} child=${child} v=${v} reload=${reload} />
+    <${KindnessJar} S=${S} child=${child} />
     <${SpendForm} S=${S} child=${child} v=${v} reload=${reload} />
+    <${Gallery} S=${S} child=${child} reload=${reload} />
     <${History} v=${v} canDeletePending=${true} reload=${reload} />
   </div>`;
 }
@@ -328,7 +396,7 @@ function ParentHome({ S, reload }) {
   const child = S.children.find((c) => c.id === childId) || S.children[0];
   const pendingCount = S.entries.filter((x) => x.status === "pending").length + S.money.filter((x) => x.status === "pending").length
     + S.sessions.filter((s) => s.needs_review).length + S.paydays.filter((p) => p.status === "draft").length;
-  const tabs = [["check", t("tabCheck"), pendingCount], ["money", t("tabMoney")], ["rules", t("tabRules")], ["screen", t("tabScreen")], ["family", t("tabFamily")], ...(S.isAdmin ? [["admin", t("tabAdmin")]] : [])];
+  const tabs = [["check", t("tabCheck"), pendingCount], ["money", t("tabMoney")], ["rules", t("tabRules")], ["screen", t("tabScreen")], ["gallery", t("gallery")], ["family", t("tabFamily")], ...(S.isAdmin ? [["admin", t("tabAdmin")]] : [])];
   const v = child ? childView(S, child) : null;
   return html`<div class="wrap">
     <header class="top"><${Mascot} /><h1>${S.family.name}<small>${S.me.display_name}</small></h1>
@@ -338,10 +406,11 @@ function ParentHome({ S, reload }) {
     <nav class="tabs" role="tablist">${tabs.map(([k, label, n]) => html`<button role="tab" aria-selected=${tab === k} onClick=${() => setTab(k)}>${label}${n ? html`<span class="badge">${n}</span>` : null}</button>`)}</nav>
     ${!child && tab !== "family" && tab !== "admin" ? html`<div class="empty">Tambahkan anak dulu di tab Keluarga.</div>` : null}
     ${child && tab === "check" ? html`<${CheckTab} S=${S} child=${child} v=${v} reload=${reload} />` : null}
-    ${child && tab === "money" ? html`<${MoneyTab} S=${S} child=${child} v=${v} reload=${reload} />` : null}
-    ${child && tab === "rules" ? html`<${RulesTab} S=${S} child=${child} v=${v} reload=${reload} />` : null}
-    ${child && tab === "screen" ? html`<${ScreenTab} S=${S} child=${child} v=${v} reload=${reload} />` : null}
-    ${tab === "family" ? html`<${FamilyTab} S=${S} child=${child} reload=${reload} />` : null}
+    ${child && tab === "money" ? html`<${MoneyTab} key=${child.id} S=${S} child=${child} v=${v} reload=${reload} />` : null}
+    ${child && tab === "rules" ? html`<${RulesTab} key=${child.id} S=${S} child=${child} v=${v} reload=${reload} />` : null}
+    ${child && tab === "screen" ? html`<${ScreenTab} key=${child.id} S=${S} child=${child} v=${v} reload=${reload} />` : null}
+    ${tab === "gallery" ? html`<${Gallery} S=${S} child=${null} reload=${reload} canDeleteAll=${true} />` : null}
+    ${tab === "family" ? html`<${FamilyTab} key=${child?.id} S=${S} child=${child} reload=${reload} />` : null}
     ${tab === "admin" ? html`<${AdminTab} S=${S} reload=${reload} />` : null}
   </div>`;
 }
@@ -377,7 +446,22 @@ function CheckTab({ S, child, v, reload }) {
       <div class="tiles">${v.acts.filter((a) => a.active).map((a) => html`<button type="button" class="tile ${a.points < 0 ? "neg" : ""}" onClick=${() => setLogOpen(a)}><span class="em">${a.emoji}</span><span class="nm">${a.name}</span></button>`)}</div>
       ${logOpen && (logOpen.kind === "outcome" ? html`<${ParentOutcomeSheet} S=${S} act=${logOpen} child=${child} v=${v} onClose=${() => setLogOpen(null)} reload=${reload} />` : html`<${LogSheet} act=${logOpen} child=${child} v=${v} parentUid=${uid} onClose=${() => setLogOpen(null)} reload=${reload} />`)}
     </section>
+    <${StarsPanel} S=${S} child=${child} v=${v} reload=${reload} />
     <${ParentHistory} S=${S} v=${v} reload=${reload} />`;
+}
+
+function StarsPanel({ S, child, v, reload }) {
+  const [busy, run] = useBusy();
+  const [note, setNote] = useState("");
+  const [emoji, setEmoji] = useState("⭐");
+  const stars = S.stars.filter((x) => x.child_id === child.id);
+  return html`<section class="panel"><div class="panel-head"><h2>${t("giveStar")}</h2><span class="muted">${stars.length} ⭐</span></div>
+    <p class="muted small">${t("starHint")}</p>
+    <div class="chips">${["⭐", "💛", "🌟", "🤍", "🌸"].map((x) => html`<button type="button" class="chip-btn" aria-pressed=${emoji === x} onClick=${() => setEmoji(x)}>${x}</button>`)}</div>
+    <div class="row wrap-row"><input class="in grow" placeholder=${t("starWhat")} maxlength="80" value=${note} onInput=${(e) => setNote(e.target.value)} />
+      <button class="btn" disabled=${busy || !note.trim()} onClick=${() => run(async () => { await A.addStar(child.id, { note: note.trim(), emoji, date: v.today }); setNote(""); await reload(); }, t("saved"))}>${t("give")}</button></div>
+    <div class="list">${stars.slice(0, 8).map((x) => html`<div class="item"><span class="em">${x.emoji}</span><div class="main"><b>${x.note}</b><span>${fmtDay(x.date)}</span></div>
+      <button class="btn sm ghost" disabled=${busy} onClick=${() => run(async () => { await A.deleteStar(x.id); await reload(); })}>${t("remove")}</button></div>`)}</div></section>`;
 }
 
 function ParentOutcomeSheet({ S, act, child, v, onClose, reload }) {
@@ -411,7 +495,7 @@ function ProposalRow({ S, x, child, v, reload }) {
     await reload();
   }, t("saved"));
   return html`<div class="rule"><div class="row"><span style="font-size:24px">${x.emoji || "💡"}</span><div class="grow"><b>${x.title}</b><div class="muted small">${fmtDay(x.date)} · minta ${x.requested_points} poin ${x.note ? "· " + x.note : ""}</div></div></div>
-    <div class="row wrap-row"><label class="f" style="width:110px">${t("pointsGiven")}<input class="in" type="number" value=${pts} onInput=${(e) => setPts(e.target.value)} /></label>
+    <div class="row wrap-row"><${Stepper} label=${t("pointsGiven")} value=${pts} onChange=${setPts} />
       <label class="check grow"><input type="checkbox" checked=${perm} onChange=${(e) => setPerm(e.target.checked)} /> ${t("asPermanent")}</label>
       <button class="btn good sm" disabled=${busy} onClick=${approve}>${t("approve")}</button>
       <button class="btn bad sm" disabled=${busy} onClick=${() => run(async () => { await A.decideEntry(S.uid, x, false); await reload(); })}>${t("reject")}</button></div></div>`;
@@ -446,32 +530,52 @@ function SessionRow({ s, v, reload }) {
       <button class="btn sm ghost" disabled=${busy} onClick=${() => run(async () => { await A.deleteSession(s.id); await reload(); })}>${t("remove")}</button></div></div>`;
 }
 
+function PaydaySettings({ child, v, reload }) {
+  const [busy, run] = useBusy();
+  const startWd = E.weekday(child.period_anchor); // the period starts on payday's weekday
+  const save = (patch) => run(async () => { await A.updateChild(child.id, patch); await reload(); }, t("saved"));
+  // Moving payday to another weekday: the current period starts on the latest such day, today included.
+  const setDay = (wd) => { let d = v.today; while (E.weekday(d) !== wd) d = E.addDays(d, -1); save({ period_anchor: d }); };
+  return html`<section class="panel"><h2>${t("paydaySettings")}</h2>
+    <div class="f"><span class="muted small" style="font-weight:800">${t("paydayEvery")}</span>
+      <div class="seg" style="grid-template-columns:repeat(3,1fr)">${[7, 14, 21].map((d) => html`<button type="button" disabled=${busy} aria-pressed=${child.period_days === d} onClick=${() => save({ period_days: d })}>${d / 7} minggu</button>`)}</div></div>
+    <div class="form">
+      <label class="f">${t("paydayDay")}<select class="in" value=${startWd} onChange=${(e) => setDay(Number(e.target.value))}>${WEEKDAYS.map((n, i) => html`<option value=${i + 1}>${n}</option>`)}</select></label>
+      <${Stepper} label=${t("paydayHour")} value=${child.payday_hour ?? 6} min=${0} max=${23} suffix=":00" onChange=${(n) => save({ payday_hour: n })} />
+    </div>
+    <p class="muted small">${t("cycleExplain", { from: WEEKDAYS[startWd - 1], to: WEEKDAYS[(startWd + 5) % 7], day: WEEKDAYS[startWd - 1], hour: String(child.payday_hour ?? 6).padStart(2, "0") })}</p>
+    <div class="f"><span class="muted small" style="font-weight:800">${t("paydayMode")}</span>
+      <div class="seg" style="grid-template-columns:repeat(3,1fr)">${["auto", "approval", "manual"].map((m) => html`<button type="button" disabled=${busy} aria-pressed=${child.payday_mode === m} onClick=${() => save({ payday_mode: m })}>${t("mode_" + m)}</button>`)}</div>
+      <p class="muted small">${t("modeHelp_" + child.payday_mode)}</p></div>
+  </section>`;
+}
+
 function MoneyTab({ S, child, v, reload }) {
   const [busy, run] = useBusy();
   const fam = S.family;
+  const cyc = cycleOf(child);
   const myPaydays = S.paydays.filter((p) => p.child_id === child.id);
   const paidEnds = new Set(myPaydays.filter((p) => p.status === "paid").map((p) => p.period_end));
   const due = [];
-  for (let i = Math.max(0, E.periodOf(child.start_date, { anchor: fam.period_anchor, periodDays: fam.period_days }).index); ; i++) {
-    const end = E.addDays(fam.period_anchor, (i + 1) * fam.period_days - 1);
+  for (let i = E.periodOf(child.start_date, cyc).index; ; i++) {
+    const end = E.addDays(child.period_anchor, (i + 1) * child.period_days - 1);
     if (end >= v.today) break;
-    if (!paidEnds.has(end)) due.push(end);
+    if (end >= child.start_date && !paidEnds.has(end)) due.push(end);
   }
   const pay = (end) => run(async () => {
     await A.materializeAutos(S, child, v.today);
     await A.payChild(child.id, end); await reload();
   }, t("paid"));
   const preview = (end) => E.payable(v.entries, end, fam.cents_per_point, child.start_date);
+  const running = E.payable(v.entries, v.today, fam.cents_per_point, child.start_date);
   return html`
-    <section class="panel"><h2>${t("paydayMode")}</h2>
-      <div class="seg" style="grid-template-columns:repeat(3,1fr)">${["auto", "approval", "manual"].map((m) => html`<button type="button" aria-pressed=${fam.payday_mode === m} onClick=${() => run(async () => { await A.updateFamily(fam.id, { payday_mode: m }); await reload(); })}>${t("mode_" + m)}</button>`)}</div>
-      <p class="muted">${t("modeHelp_" + fam.payday_mode)}</p>
+    <section class="panel"><h2>${t("tabMoney")}</h2>
       ${due.map((end) => { const p = preview(end); const draft = myPaydays.find((d) => d.period_end === end && d.status === "draft");
-        return html`<div class="week"><div class="row"><div class="grow"><b>${draft ? t("draft") + " · " : ""}Periode s.d. ${fmtDay(end, true)}</b><div class="muted small">${t("payPreview", { p: signed(p.points) || "0", amt: eur(p.cents) })} (sebelum −1 otomatis terakhir)</div></div>
+        return html`<div class="week"><div class="row wrap-row"><div class="grow"><b>${draft ? t("draft") + " · " : ""}Periode s.d. ${fmtDay(end, true)}</b><div class="muted small">${t("payPreview", { p: signed(p.points) || "0", amt: eur(p.cents) })}</div></div>
           <button class="btn good" disabled=${busy} onClick=${() => pay(end)}>${t("payNow", { date: fmtDay(end) })}</button></div></div>`; })}
-      <div class="week"><div class="row"><div class="grow"><b>Periode berjalan</b><div class="muted small">${fmtDay(v.period.start)} – ${fmtDay(v.period.end)} · ${t("payPreview", { p: signed(E.payable(v.entries, v.today, fam.cents_per_point, child.start_date).points) || "0", amt: eur(E.payable(v.entries, v.today, fam.cents_per_point, child.start_date).cents) })}</div></div>
-        <button class="btn ghost sm" disabled=${busy} onClick=${() => pay(E.addDays(v.today, -1))}>Bayar sampai kemarin</button></div></div>
+      <div class="week"><b>Periode berjalan</b><div class="muted small">${fmtDay(v.period.start > child.start_date ? v.period.start : child.start_date)} – ${fmtDay(v.period.end)} · ${t("payPreview", { p: signed(running.points) || "0", amt: eur(running.cents) })} · gajian ${fmtDay(v.period.payday, true)} ${String(child.payday_hour ?? 6).padStart(2, "0")}:00</div></div>
     </section>
+    <${PaydaySettings} child=${child} v=${v} reload=${reload} />
     <${MoneyForm} S=${S} child=${child} v=${v} reload=${reload} />
     <section class="panel"><h2>${t("ledger")}</h2><div class="list">${v.money.filter((x) => x.status === "approved").slice(0, 60).map((x) => html`<div class="item">
       <span class="em">${S.categories.find((c) => c.id === x.category_id)?.emoji || (x.source === "payday" ? "💰" : "💶")}</span>
@@ -505,10 +609,15 @@ function RulesTab({ S, child, v, reload }) {
   const tpls = S.templates;
   const cats = S.categories.filter((c) => c.kind === "activity");
   const [adding, setAdding] = useState(null);
+  const pr = child.proposals || { enabled: true, perWeek: 2 };
+  const savePr = (patch) => run(async () => { await A.updateChild(child.id, { proposals: { ...pr, ...patch } }); await reload(); }, t("saved"));
   return html`
-    <section class="panel"><div class="panel-head"><h2>Nilai poin</h2></div>
-      <div class="row wrap-row"><label class="f" style="width:160px">1 poin = (sen)<input class="in" id="cpp" type="number" min="1" value=${S.family.cents_per_point} onChange=${(e) => run(async () => { await A.updateFamily(S.family.id, { cents_per_point: Math.max(1, Number(e.target.value) || 10) }); await reload(); }, t("saved"))} /></label>
-      <p class="muted grow">10 poin = ${eur(10 * S.family.cents_per_point)}</p></div></section>
+    <section class="panel"><div class="panel-head"><h2>Nilai poin</h2><span class="muted">10 poin = ${eur(10 * S.family.cents_per_point)}</span></div>
+      <${Stepper} label="1 poin (sen)" value=${S.family.cents_per_point} min=${1} max=${100} onChange=${(n) => run(async () => { await A.updateFamily(S.family.id, { cents_per_point: n }); await reload(); })} /></section>
+    <section class="panel"><h2>${t("propose")}</h2>
+      <label class="check"><input type="checkbox" checked=${pr.enabled !== false} onChange=${(e) => savePr({ enabled: e.target.checked })} /> ${child.name} boleh mengusulkan kegiatan baru</label>
+      ${pr.enabled !== false ? html`<${Stepper} label="Maksimal usulan per minggu" value=${pr.perWeek ?? 2} min=${1} max=${20} onChange=${(n) => savePr({ perWeek: n })} />` : null}
+    </section>
     <section class="panel"><div class="panel-head"><h2>Kegiatan ${child.name}</h2></div>
       ${v.acts.map((a) => html`<${ActivityEditor} key=${a.id + a.sort} S=${S} a=${a} cats=${cats} reload=${reload} />`)}
       ${adding ? html`<${ActivityEditor} S=${S} a=${adding} cats=${cats} reload=${async () => { setAdding(null); await reload(); }} onCancel=${() => setAdding(null)} />` : html`
@@ -528,31 +637,35 @@ function RulesTab({ S, child, v, reload }) {
 function ActivityEditor({ S, a, cats, reload, onCancel }) {
   const [x, setX] = useState({ ...a, outcomes: [...(a.outcomes || [])] });
   const [busy, run] = useBusy();
-  const set = (k, num) => (e) => setX({ ...x, [k]: e.target.type === "checkbox" ? e.target.checked : num ? (e.target.value === "" ? null : Number(e.target.value)) : e.target.value });
-  const setO = (i, k) => (e) => { const o = x.outcomes.map((y, j) => (j === i ? { ...y, [k]: k === "points" ? Number(e.target.value) : e.target.value } : y)); setX({ ...x, outcomes: o }); };
+  const set = (k) => (e) => setX({ ...x, [k]: e.target.type === "checkbox" ? e.target.checked : e.target.value });
+  const num = (k) => (n) => setX({ ...x, [k]: n });
+  const setO = (i, k) => (val) => setX({ ...x, outcomes: x.outcomes.map((y, j) => (j === i ? { ...y, [k]: val } : y)) });
   const save = () => run(async () => {
     const o = x.outcomes.map((y) => ({ ...y, key: y.key || (y.label || "").toLowerCase().replace(/[^a-z0-9]+/g, "-") }));
-    await A.saveActivity({ ...x, outcomes: o, unit: x.unit || null }); await reload();
+    await A.saveActivity({ ...x, outcomes: o, unit: x.unit || null, max_per_day: x.max_per_day || null }); await reload();
   }, t("saved"));
   const kindName = { simple: "Biasa", outcome: "Pilihan hasil", weekly: "Wajib mingguan" }[x.kind];
-  return html`<div class="rule ${x.active ? "" : "off"}">
+  return html`<details class="rule ${x.active ? "" : "off"}" open=${!a.id}>
+    <summary class="row"><span style="font-size:22px">${x.emoji || "⭐"}</span><b class="grow">${x.name || "Kegiatan baru"}</b><span class="tag info">${kindName}</span>
+      ${x.kind === "simple" ? html`<span class="amt ${amtClass(x.points)}">${signed(x.points) || "0"}</span>` : null}</summary>
     <div class="row wrap-row"><input class="in" style="width:60px;text-align:center" aria-label="Ikon" value=${x.emoji || ""} onInput=${set("emoji")} />
-      <input class="in grow" aria-label="Nama" placeholder="Nama kegiatan" value=${x.name} onInput=${set("name")} />
-      <span class="tag info">${kindName}</span></div>
+      <input class="in grow" aria-label="Nama" placeholder="Nama kegiatan" value=${x.name} onInput=${set("name")} /></div>
     <div class="form">
       <label class="f">Kategori<select class="in" value=${x.category_id || ""} onChange=${set("category_id")}><option value="">—</option>${cats.map((c) => html`<option value=${c.id}>${c.emoji} ${c.name}</option>`)}</select></label>
       <label class="f">Satuan (kosongkan jika tidak ada)<input class="in" value=${x.unit || ""} placeholder="halaman, ayat" onInput=${set("unit")} /></label>
-      ${x.kind === "simple" ? html`<label class="f">Poin ${x.unit ? "per " + x.unit : ""}<input class="in" type="number" value=${x.points} onInput=${set("points", true)} /></label>` : null}
+      ${x.kind === "simple" ? html`<${Stepper} label=${"Poin" + (x.unit ? " per " + x.unit : "")} value=${x.points} onChange=${num("points")} />
+        <${Stepper} label="Maksimal per hari (0 = bebas)" value=${x.max_per_day || 0} min=${0} max=${20} onChange=${num("max_per_day")} />` : null}
       ${x.kind === "weekly" ? html`
-        <label class="f">Kuota per minggu<input class="in" type="number" min="1" value=${x.quota} onInput=${set("quota", true)} /></label>
-        <label class="f">Penalti jika kurang<input class="in" type="number" value=${x.penalty} onInput=${set("penalty", true)} /></label>
-        <label class="f">Bonus per ${x.unit || "unit"} di atas kuota<input class="in" type="number" value=${x.bonus_per_unit} onInput=${set("bonus_per_unit", true)} /></label>
-        <label class="check">${html`<input type="checkbox" checked=${x.partial} onChange=${set("partial")} />`} Penalti sebagian</label>` : null}
-      <label class="f">Urutan<input class="in" type="number" value=${x.sort} onInput=${set("sort", true)} /></label>
+        <${Stepper} label="Minimal per minggu" value=${x.quota} min=${1} max=${100} onChange=${num("quota")} />
+        <${Stepper} label="Penalti jika kurang" value=${x.penalty} max=${0} onChange=${num("penalty")} />
+        <${Stepper} label=${"Bonus per " + (x.unit || "unit") + " di atas minimal"} value=${x.bonus_per_unit} min=${0} onChange=${num("bonus_per_unit")} />
+        <label class="check"><input type="checkbox" checked=${x.partial} onChange=${set("partial")} /> Penalti sebagian</label>` : null}
+      <${Stepper} label="Urutan" value=${x.sort} min=${0} max=${200} onChange=${num("sort")} />
       <label class="f">Berlaku mulai<input class="in" type="date" value=${x.start_date} onInput=${set("start_date")} /></label>
     </div>
     ${x.kind === "outcome" ? html`<div class="list"><span class="muted small">Pilihan hasil dan poinnya</span>
-      ${x.outcomes.map((o, i) => html`<div class="outcome-row"><input class="in" value=${o.label} placeholder="Label" onInput=${setO(i, "label")} /><input class="in" type="number" value=${o.points} onInput=${setO(i, "points")} />
+      ${x.outcomes.map((o, i) => html`<div class="outcome-row"><input class="in" value=${o.label} placeholder="Label" onInput=${(e) => setO(i, "label")(e.target.value)} />
+        <${Stepper} value=${o.points} onChange=${setO(i, "points")} />
         <button class="btn sm ghost" onClick=${() => setX({ ...x, outcomes: x.outcomes.filter((_, j) => j !== i) })}>${t("remove")}</button></div>`)}
       <button class="btn sm ghost" style="align-self:flex-start" onClick=${() => setX({ ...x, outcomes: [...x.outcomes, { key: "", label: "", points: 0 }] })}>+ Pilihan</button>
       <label class="check"><input type="checkbox" checked=${x.daily_required} onChange=${set("daily_required")} /> Wajib harian: kalau tidak dicatat, otomatis dihitung</label>
@@ -561,7 +674,7 @@ function ActivityEditor({ S, a, cats, reload, onCancel }) {
     <div class="row wrap-row"><button class="btn sm" disabled=${busy || !x.name.trim()} onClick=${save}>${t("save")}</button>
       ${a.id ? html`<button class="btn sm ghost" disabled=${busy} onClick=${() => run(async () => { await A.saveActivity({ ...a, active: !a.active }); await reload(); })}>${a.active ? "Nonaktifkan" : "Aktifkan"}</button>` : null}
       ${onCancel ? html`<button class="btn sm ghost" onClick=${onCancel}>${t("cancel")}</button>` : null}</div>
-  </div>`;
+  </details>`;
 }
 
 function CategoryEditor({ S, kind, title, reload }) {
@@ -581,30 +694,39 @@ function CategoryEditor({ S, kind, title, reload }) {
 function ScreenTab({ S, child, v, reload }) {
   const [c, setC] = useState({ ...child.screen });
   const [busy, run] = useBusy();
-  const num = (k) => (e) => setC({ ...c, [k]: Number(e.target.value) });
+  const num = (k) => (n) => setC({ ...c, [k]: n });
+  const scr = v.screen || { ...c, adjust: {} };
   const mins = E.screenMinutesByDay(v.sessions, v.tz);
-  const ws = E.weekStart(v.today);
+  const ws = v.weekStart;
   const byDevice = {};
   for (const s of v.sessions.filter((s) => E.localDate(s.started_at, v.tz) >= ws)) {
     const m = Math.round(((s.ended_at ? new Date(s.ended_at) : new Date()) - new Date(s.started_at)) / 60000);
     byDevice[s.device_label || "?"] = (byDevice[s.device_label || "?"] || 0) + m;
   }
+  const adjOf = (d) => (S.adjust.find((a) => a.child_id === child.id && a.date === d) || {}).minutes || 0;
+  const tomorrow = E.addDays(v.today, 1);
+  const setAdj = (d, m) => run(async () => { await A.setScreenAdjust(child.id, d, m); await reload(); });
   return html`
+    <section class="panel"><h2>${t("screenAdjust")}</h2><p class="muted small">${t("screenAdjustHint")}</p>
+      ${[[v.today, t("today")], [tomorrow, "Besok"]].map(([d, label]) => { const base = E.screenLimit({ ...c, adjust: {} }, d); const adj = adjOf(d);
+        return html`<div class="week"><div class="row wrap-row"><div class="grow"><b>${label} · ${fmtDay(d)}</b><div class="muted small">Jatah ${base + adj} menit ${adj ? `(${adj > 0 ? "+" : ""}${adj})` : ""}</div></div>
+          <${Stepper} value=${adj} step=${15} min=${-base} max=${240} suffix="mnt" onChange=${(n) => setAdj(d, n)} /></div></div>`; })}
+    </section>
     <section class="panel"><h2>Minggu ini</h2>
-      <div class="list">${[0, 1, 2, 3, 4, 5, 6].map((i) => { const d = E.addDays(ws, i); if (d > v.today) return null; const used = mins[d] || 0; const lim = E.screenLimit(c, d);
-        return html`<div class="item"><div class="main"><b>${fmtDay(d)}</b><div class="meter ${used <= lim ? "full" : ""}" style="margin-top:6px"><div style="width:${Math.min(100, (used / lim) * 100)}%"></div></div></div><span class="amt ${used > lim ? "neg" : "zero"}">${used}/${lim} mnt</span></div>`; })}</div>
+      <div class="list">${[0, 1, 2, 3, 4, 5, 6].map((i) => { const d = E.addDays(ws, i); if (d > v.today || d < child.start_date) return null; const used = mins[d] || 0; const lim = E.screenLimit(scr, d);
+        return html`<div class="item"><div class="main"><b>${fmtDay(d)}</b><div class="meter ${used <= lim ? "full" : ""}" style="margin-top:6px"><div style="width:${Math.min(100, lim ? (used / lim) * 100 : 100)}%"></div></div></div><span class="amt ${used > lim ? "neg" : "zero"}">${used}/${lim} mnt</span></div>`; })}</div>
       ${Object.keys(byDevice).length ? html`<p class="muted">${Object.entries(byDevice).map(([k, m]) => `${k}: ${m} mnt`).join(" · ")}</p>` : null}
     </section>
     <section class="panel"><h2>Aturan screentime</h2>
       <label class="check"><input type="checkbox" checked=${c.enabled !== false} onChange=${(e) => setC({ ...c, enabled: e.target.checked })} /> Screentime aktif</label>
       <div class="form">
-        <label class="f">Jatah hari sekolah (menit)<input class="in" type="number" value=${c.weekdayLimitMin} onInput=${num("weekdayLimitMin")} /></label>
-        <label class="f">Jatah akhir pekan (menit)<input class="in" type="number" value=${c.weekendLimitMin} onInput=${num("weekendLimitMin")} /></label>
-        <label class="f">Penalti tiap kelebihan (menit)<input class="in" type="number" value=${c.overBlockMin} onInput=${num("overBlockMin")} /></label>
-        <label class="f">Poin penalti per blok<input class="in" type="number" value=${c.overPenalty} onInput=${num("overPenalty")} /></label>
-        <label class="f">Hadiah tiap sisa (menit)<input class="in" type="number" value=${c.leftoverBlockMin} onInput=${num("leftoverBlockMin")} /></label>
-        <label class="f">Poin hadiah per blok<input class="in" type="number" value=${c.leftoverPointsPerBlock} onInput=${num("leftoverPointsPerBlock")} /></label>
-        <label class="f">Peringatan saat sisa (menit)<input class="in" type="number" value=${c.warnMin} onInput=${num("warnMin")} /></label>
+        <${Stepper} label="Jatah hari sekolah" value=${c.weekdayLimitMin} step=${15} min=${0} max=${600} suffix="mnt" onChange=${num("weekdayLimitMin")} />
+        <${Stepper} label="Jatah akhir pekan" value=${c.weekendLimitMin} step=${15} min=${0} max=${600} suffix="mnt" onChange=${num("weekendLimitMin")} />
+        <${Stepper} label="Penalti tiap kelebihan" value=${c.overBlockMin} step=${5} min=${5} max=${120} suffix="mnt" onChange=${num("overBlockMin")} />
+        <${Stepper} label="Poin penalti per blok" value=${c.overPenalty} max=${0} onChange=${num("overPenalty")} />
+        <${Stepper} label="Hadiah tiap sisa" value=${c.leftoverBlockMin} step=${5} min=${5} max=${240} suffix="mnt" onChange=${num("leftoverBlockMin")} />
+        <${Stepper} label="Poin hadiah per blok" value=${c.leftoverPointsPerBlock} min=${0} onChange=${num("leftoverPointsPerBlock")} />
+        <${Stepper} label="Peringatan saat sisa" value=${c.warnMin} min=${0} max=${30} suffix="mnt" onChange=${num("warnMin")} />
       </div>
       <button class="btn" disabled=${busy} onClick=${() => run(async () => { await A.updateChild(child.id, { screen: c }); await reload(); }, t("saved"))}>${t("save")}</button></section>
     <${CategoryEditor} S=${S} kind="screen" title="Pilihan perangkat / kegiatan layar" reload=${reload} />
@@ -612,6 +734,16 @@ function ScreenTab({ S, child, v, reload }) {
 }
 
 // ---------- family ----------
+function BackgroundPicker({ S, child, reload }) {
+  const [busy, run] = useBusy();
+  const url = child.background_path ? S.urls[child.background_path] : null;
+  const pick = (e) => { const f = e.target.files?.[0]; e.target.value = ""; if (!f) return;
+    run(async () => { const path = await A.uploadMedia(S.family.id, child.id, f, "background"); await A.updateChild(child.id, { background_path: path }); await reload(); }, t("saved")); };
+  return html`<div class="row wrap-row">${url ? html`<img src=${url} alt="" class="bg-thumb" />` : html`<span class="muted small">Belum ada gambar latar.</span>`}
+    <label class="btn sm" style="cursor:pointer">${busy ? t("uploading") : url ? "Ganti gambar" : "Pilih gambar"}<input type="file" accept="image/*" hidden disabled=${busy} onChange=${pick} /></label>
+    ${url ? html`<button class="btn sm ghost" disabled=${busy} onClick=${() => run(async () => { await A.updateChild(child.id, { background_path: null }); await reload(); })}>Hapus latar</button>` : null}</div>`;
+}
+
 function FamilyTab({ S, child, reload }) {
   const [busy, run] = useBusy();
   const firstDay = (() => { const td = E.localDate(new Date(), S.family.timezone); return S.family.period_anchor > td ? S.family.period_anchor : td; })();
@@ -628,11 +760,15 @@ function FamilyTab({ S, child, reload }) {
         <button class="btn sm" disabled=${busy || !/^\d{6}$/.test(pin)} onClick=${() => run(async () => { await A.accounts({ action: "set_pin", child_id: child.id, pin }); setPin(""); }, t("saved"))}>Ganti PIN</button></div>
       <h3>Uang saku</h3>
       <label class="check"><input type="checkbox" checked=${!!al.enabled} onChange=${(e) => setAl({ ...al, enabled: e.target.checked })} /> Uang saku otomatis</label>
-      <div class="form"><label class="f">Nominal (€)<input class="in" inputmode="decimal" value=${al.amount} onInput=${(e) => setAl({ ...al, amount: e.target.value })} /></label>
-        <label class="f">Setiap<select class="in" value=${al.freq} onChange=${(e) => setAl({ ...al, freq: e.target.value })}><option value="weekly">minggu</option><option value="monthly">bulan</option></select></label>
+      <div class="seg"><button type="button" aria-pressed=${(al.mode || "schedule") === "payday"} onClick=${() => setAl({ ...al, mode: "payday" })}>Ikut gajian</button>
+        <button type="button" aria-pressed=${(al.mode || "schedule") === "schedule"} onClick=${() => setAl({ ...al, mode: "schedule" })}>Jadwal sendiri</button></div>
+      <div class="form"><label class="f">Nominal per minggu${al.mode === "payday" ? "" : " / per kali"} (€)<input class="in" inputmode="decimal" value=${al.amount} onInput=${(e) => setAl({ ...al, amount: e.target.value })} /></label>
+        ${al.mode === "payday" ? html`<p class="muted small">Dibayar bersama gajian: nominal × ${child.period_days / 7} minggu.</p>` : html`<label class="f">Setiap<select class="in" value=${al.freq} onChange=${(e) => setAl({ ...al, freq: e.target.value })}><option value="weekly">minggu</option><option value="monthly">bulan</option></select></label>
         ${al.freq === "monthly" ? html`<label class="f">Tanggal<input class="in" type="number" min="1" max="28" value=${al.monthday || 1} onInput=${(e) => setAl({ ...al, monthday: Number(e.target.value) })} /></label>`
-          : html`<label class="f">Hari<select class="in" value=${al.weekday || 1} onChange=${(e) => setAl({ ...al, weekday: Number(e.target.value) })}>${["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"].map((d, i) => html`<option value=${i + 1}>${d}</option>`)}</select></label>`}</div>
-      <button class="btn sm" style="align-self:flex-start" disabled=${busy} onClick=${() => run(async () => { const a = { enabled: !!al.enabled, cents: parseEur(al.amount) || 0, freq: al.freq || "weekly", weekday: al.weekday || 1, monthday: al.monthday || 1, start_date: al.start_date || E.localDate(new Date(), S.family.timezone) }; await A.updateChild(child.id, { allowance: a }); await reload(); }, t("saved"))}>${t("save")}</button>
+          : html`<label class="f">Hari<select class="in" value=${al.weekday || 1} onChange=${(e) => setAl({ ...al, weekday: Number(e.target.value) })}>${WEEKDAYS.map((d, i) => html`<option value=${i + 1}>${d}</option>`)}</select></label>`}`}</div>
+      <button class="btn sm" style="align-self:flex-start" disabled=${busy} onClick=${() => run(async () => { const a = { enabled: !!al.enabled, mode: al.mode || "schedule", cents: parseEur(al.amount) || 0, freq: al.freq || "weekly", weekday: al.weekday || 1, monthday: al.monthday || 1, start_date: al.start_date || E.localDate(new Date(), S.family.timezone) }; await A.updateChild(child.id, { allowance: a }); await reload(); }, t("saved"))}>${t("save")}</button>
+      <h3>Gambar latar</h3>
+      <${BackgroundPicker} S=${S} child=${child} reload=${reload} />
       <h3>Hari libur sholat</h3>
       <label class="check"><input type="checkbox" checked=${child.excused_enabled} onChange=${(e) => run(async () => { await A.updateChild(child.id, { excused_enabled: e.target.checked }); await reload(); })} /> Aktifkan fitur libur (tidak ada −1 otomatis pada hari libur)</label>
       ${child.excused_enabled ? html`<div class="row wrap-row"><input class="in" type="date" style="width:180px" value=${exDay} onInput=${(e) => setExDay(e.target.value)} />

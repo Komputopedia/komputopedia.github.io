@@ -33,10 +33,17 @@ const id = {
   proposal: "Usulan", asPermanent: "Jadikan kegiatan tetap", pointsGiven: "Poin",
   spendReq: "Minta izin belanja", nothingToCheck: "Semua sudah dicek.", sessionsReview: "Timer yang perlu dicek",
   paydayMode: "Cara gajian", mode_auto: "Otomatis", mode_approval: "Perlu persetujuan", mode_manual: "Manual",
-  modeHelp_auto: "Dibayar sendiri tiap Senin gajian pukul 06:00.", modeHelp_approval: "Senin gajian dibuatkan draf, lalu Ayah/Bunda menekan Bayar.", modeHelp_manual: "Hanya dibayar lewat tombol.",
+  modeHelp_auto: "Dibayar otomatis pada hari dan jam gajian.", modeHelp_approval: "Pada hari gajian dibuatkan draf, lalu Ayah/Bunda menekan Bayar.", modeHelp_manual: "Hanya dibayar lewat tombol.",
   payNow: "Bayar gajian sampai {date}", payPreview: "{p} poin = {amt}", paid: "Gajian dibayar", draft: "Draf gajian",
   moneyIn: "Uang masuk", moneyOut: "Uang keluar", amount: "Nominal (€)", date: "Tanggal", save: "Simpan", saved: "Tersimpan.",
   ledger: "Buku tabungan", logFor: "Catat untuk {name}",
+  errLimitDay: "Kegiatan ini sudah dicatat hari ini.", errLimitWeek: "Jatah usulan minggu ini sudah habis.", errProposalsOff: "Usulan kegiatan sedang ditutup.",
+  doneToday: "sudah ✓ hari ini", proposalsLeft: "sisa {n} minggu ini",
+  kindJar: "Toples kebaikan", giveStar: "Bintang kebaikan", starHint: "Untuk kebaikan kecil, misalnya mengembalikan sepatu. Bintang tidak bernilai uang.", starWhat: "Kebaikan apa?", give: "Beri bintang",
+  gallery: "Galeri", addPhoto: "+ Foto", uploading: "Mengunggah…", photoCaption: "Keterangan foto (boleh kosong)", noPhotos: "Belum ada foto.",
+  paydaySettings: "Pengaturan gajian", paydayEvery: "Gajian setiap", paydayDay: "Hari gajian", paydayHour: "Jam gajian",
+  cycleExplain: "Periode {from}–{to}. Gajian tiap {day} pukul {hour}:00, untuk catatan sampai hari sebelumnya. Kuota mingguan ikut siklus ini.",
+  screenAdjust: "Jatah khusus", screenAdjustHint: "Tambah atau kurangi jatah screentime untuk hari ini atau besok saja.",
   // misc
   errPaid: "Tanggal itu sudah masuk gajian. Pakai koreksi uang.", errGeneric: "Gagal menyimpan: {m}",
 };

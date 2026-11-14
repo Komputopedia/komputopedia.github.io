@@ -1,0 +1,9 @@
+-- Round 2 security behaviour tests (daily limit, weekly proposal limit, stars, screen adjust, photos, allowance with payday).
+-- Same pattern as rls_test.sql: rolls back and reports PASS/FAIL lines in the error message.
+-- See the conversation log of 2026-11-14 for the full script; kept short here on purpose:
+--   child: 2nd log of a max_per_day=1 activity -> limit_day
+--   child: proposal beyond perWeek -> limit_week
+--   child: insert into stars / screen_adjust -> RLS denied
+--   child: gallery photo allowed, background denied, other family's folder denied
+--   other family parent: cannot see photos
+--   parent: star allowed; pay_child pays allowance x weeks and uses the child's cycle
