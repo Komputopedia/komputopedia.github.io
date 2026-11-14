@@ -130,8 +130,7 @@ function SavingsHero({ S, child, v }) {
     <div class="points">
       <span class="lbl">${t("points")}</span>
       <span class="big num">${signed(v.sum.approved) || "0"} <span class="small muted">${t("approved")}</span></span>
-      <div class="pbar"><span class="tag info">${signed(v.sum.reported) || "0"} ${t("reported")}</span>
-        ${v.sum.pending ? html`<span class="tag wait">${signed(v.sum.pending)} ${t("waiting")}</span>` : null}</div>
+      <div class="pbar">${v.sum.pending ? html`<span class="tag wait">${signed(v.sum.pending)} ${t("waitingApproval")}</span>` : html`<span class="tag ok">${t("allApproved")}</span>`}</div>
       <span class="muted small">≈ ${eur(v.sum.approved * S.family.cents_per_point)}</span>
     </div>
   </section>`;

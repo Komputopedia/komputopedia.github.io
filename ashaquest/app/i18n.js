@@ -11,7 +11,7 @@ const id = {
   noFamily: "Akun ini belum terhubung ke keluarga mana pun. Hubungi admin Kids Quest.",
   // child
   hello: "Halo, {name}!", savings: "Tabunganku", debt: "Utangku", points: "Poin periode ini",
-  reported: "dilaporkan", approved: "disetujui", waiting: "menunggu", payday: "Gajian {date}",
+  reported: "dilaporkan", approved: "disetujui", waiting: "menunggu", waitingApproval: "belum disetujui", allApproved: "semua sudah dicek", payday: "Gajian {date}",
   prayersToday: "Sholat hari ini", prayersYesterday: "Sholat kemarin", today: "Hari ini", yesterday: "Kemarin",
   notYet: "belum", missed: "terlewat", howPray: "Sholat {name}", praySave: "Simpan",
   weekly: "Wajib minggu ini", weeklyLeft: "kurang {n} {unit}", weeklyDone: "wajib sudah", weeklyBonus: "bonus +{p} poin",
