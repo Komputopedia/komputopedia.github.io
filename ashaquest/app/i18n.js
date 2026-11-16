@@ -23,6 +23,7 @@ const id = {
   notEnough: "Tabunganmu belum cukup. Kurang {amt}.", charityNote: "Sedekah mengembalikan {p} poin untukmu.",
   history: "Riwayat", noHistory: "Belum ada catatan.", cancel: "Batal", remove: "Hapus",
   screen: "Screentime", leftToday: "sisa hari ini", usedToday: "terpakai {m} menit dari {l}",
+  leftWeek: "sisa minggu ini", usedWeek: "terpakai {m} dari {l} menit minggu ini", overWeek: "Sudah lewat {m} menit dari jatah minggu ini.",
   start: "Mulai", stop: "Selesai", whatPlay: "Mau main apa?", running: "Sedang {what}",
   warn5: "Sisa {m} menit lagi!", overNow: "Sudah lewat {m} menit dari jatah hari ini.",
   // statuses

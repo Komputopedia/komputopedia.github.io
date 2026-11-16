@@ -80,6 +80,13 @@ export function screenMinutesByDay(sessions, tz, now) {
 /** Daily screen limit, including a parent's adjustment for that day. */
 export function screenLimit(screen, day) { return (isWeekend(day) ? screen.weekendLimitMin : screen.weekdayLimitMin) + (Number(screen.adjust?.[day]) || 0); }
 
+/** Weekly screen quota for the week starting `weekStartDay`, including the parent's per-day adjustments in that week. */
+export function screenWeekLimit(screen, weekStartDay) {
+  let lim = Number(screen.weeklyLimitMin) || 0;
+  for (let i = 0; i < 7; i++) lim += Number(screen.adjust?.[addDays(weekStartDay, i)]) || 0;
+  return lim;
+}
+
 /** Logged (not automatic, not rejected) entries of an activity on a day, for daily limits. */
 export function countToday(entries, activityId, day) { return entries.filter((x) => x.activity_id === activityId && x.date === day && !x.auto_key && LIVE.has(x.status)).length; }
 
@@ -127,13 +134,22 @@ export function deriveAutoEntries({ today, fromDate, activities = [], entries = 
   if (screen) {
     const start = from(screen.start_date || today);
     const mins = screenMinutesByDay(sessions, tz);
-    for (let d = start; d <= lastClosed; d = addDays(d, 1)) {
+    const weekly = screen.mode === "weekly";
+    for (let d = start; !weekly && d <= lastClosed; d = addDays(d, 1)) {
       const over = (mins[d] || 0) - screenLimit(screen, d);
       if (over > 0) push({ auto_key: "st-over:" + d, date: d, points: Math.ceil(over / screen.overBlockMin) * screen.overPenalty, title: "Screentime lebih", emoji: "⏰", kind: "screen" });
     }
     for (let w = wk(start); addDays(w, 6) <= lastClosed; w = addDays(w, 7)) {
       let left = 0;
-      for (let i = 0; i < 7; i++) { const d = addDays(w, i); if (d >= start) left += Math.max(0, screenLimit(screen, d) - (mins[d] || 0)); }
+      if (weekly) {
+        let used = 0;
+        for (let i = 0; i < 7; i++) { const d = addDays(w, i); if (d >= start) used += mins[d] || 0; }
+        const lim = screenWeekLimit(screen, w);
+        if (used > lim) push({ auto_key: "st-over-w:" + w, date: addDays(w, 6), qty: used - lim, points: Math.ceil((used - lim) / screen.overBlockMin) * screen.overPenalty, title: "Screentime lebih", emoji: "⏰", kind: "screen" });
+        left = Math.max(0, lim - used);
+      } else {
+        for (let i = 0; i < 7; i++) { const d = addDays(w, i); if (d >= start) left += Math.max(0, screenLimit(screen, d) - (mins[d] || 0)); }
+      }
       const pts = Math.floor(left / screen.leftoverBlockMin) * screen.leftoverPointsPerBlock;
       if (pts > 0) push({ auto_key: "st-left:" + w, date: addDays(w, 6), qty: left, points: pts, title: "Hemat screentime", emoji: "🌤️", kind: "screen" });
     }

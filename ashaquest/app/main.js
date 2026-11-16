@@ -2,12 +2,12 @@
 import { h, render } from "https://esm.sh/preact@10.24.3";
 import { useState, useEffect, useMemo, useCallback, useRef } from "https://esm.sh/preact@10.24.3/hooks";
 import htm from "https://esm.sh/htm@3.1.1";
-import * as E from "./engine.js?v=202611142030";
-import * as A from "./api.js?v=202611142030";
-import { t, locale } from "./i18n.js?v=202611142030";
+import * as E from "./engine.js?v=202611161238";
+import * as A from "./api.js?v=202611161238";
+import { t, locale } from "./i18n.js?v=202611161238";
 
 const html = htm.bind(h);
-const APP_BUILD = "202611142030"; // set by bump-version.sh
+const APP_BUILD = "202611161238"; // set by bump-version.sh
 const VersionTag = () => html`<p class="muted small" style="text-align:center;opacity:.7">Asha Quest v0.2 · build ${APP_BUILD}</p>`;
 
 // ---------- formatting ----------
@@ -149,21 +149,25 @@ function ScreenCard({ S, child, v, reload }) {
   const [busy, run] = useBusy();
   useEffect(() => { if (!open) return; const i = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(i); }, [open?.id]);
   if (cfg.enabled === false) return null;
-  const dayStart = E.localMidnight(v.today, v.tz);
-  const usedMs = v.sessions.reduce((sum, s) => sum + Math.max(0, Math.min(s.ended_at ? new Date(s.ended_at).getTime() : now, dayStart + 864e5) - Math.max(new Date(s.started_at).getTime(), dayStart)), 0);
+  const weekly = cfg.mode === "weekly";
+  const winFrom = weekly ? (v.weekStart > child.start_date ? v.weekStart : child.start_date) : v.today;
+  const winStart = E.localMidnight(winFrom, v.tz);
+  const winEnd = E.localMidnight(weekly ? E.addDays(v.weekStart, 7) : E.addDays(v.today, 1), v.tz);
+  const usedMs = v.sessions.reduce((sum, s) => sum + Math.max(0, Math.min(s.ended_at ? new Date(s.ended_at).getTime() : now, winEnd) - Math.max(new Date(s.started_at).getTime(), winStart)), 0);
   const used = Math.round(usedMs / 60000);
-  const limit = E.screenLimit(cfg, v.today);
+  const limit = weekly ? E.screenWeekLimit(cfg, v.weekStart) : E.screenLimit(cfg, v.today);
+  const leftLabel = weekly ? t("leftWeek") : t("leftToday");
   const leftMs = limit * 60000 - usedMs;
   const left = Math.ceil(leftMs / 60000);
   return html`<section class="panel screen" aria-label=${t("screen")}>
-    <div class="panel-head"><h2>${t("screen")}</h2><span class="muted">${t("usedToday", { m: used, l: limit })}</span></div>
+    <div class="panel-head"><h2>${t("screen")}</h2><span class="muted">${t(weekly ? "usedWeek" : "usedToday", { m: used, l: limit })}</span></div>
     ${open ? html`
       <p class="muted">${t("running", { what: open.device_label || "" })}</p>
       <div class="clock num ${leftMs < 0 ? "over" : ""}">${leftMs < 0 ? "−" : ""}${mmss(Math.abs(leftMs))}</div>
       ${left >= 0 && left <= (cfg.warnMin || 5) ? html`<div class="banner warn">${t("warn5", { m: left })}</div>` : null}
-      ${left < 0 ? html`<div class="banner bad">${t("overNow", { m: -left })}</div>` : html`<p class="muted">${t("leftToday")}</p>`}
+      ${left < 0 ? html`<div class="banner bad">${t(weekly ? "overWeek" : "overNow", { m: -left })}</div>` : html`<p class="muted">${leftLabel}</p>`}
       <button class="btn big bad" disabled=${busy} onClick=${() => run(async () => { await A.screenStop(); await reload(); })}>${t("stop")}</button>` : html`
-      <div class="clock num ${left < 0 ? "over" : ""}">${left < 0 ? "−" : ""}${Math.abs(left)} <span class="small muted">${t("leftToday")}</span></div>
+      <div class="clock num ${left < 0 ? "over" : ""}">${left < 0 ? "−" : ""}${Math.abs(left)} <span class="small muted">menit ${leftLabel}</span></div>
       <p class="muted">${t("whatPlay")}</p>
       <div class="chips">${devices.map((d) => html`<button type="button" class="chip-btn" aria-pressed=${dev === d.id} onClick=${() => setDev(d.id)}>${d.emoji} ${d.name}</button>`)}</div>
       <button class="btn big" disabled=${!dev || busy} onClick=${() => run(async () => { await A.screenStart(dev); setDev(null); await reload(); })}>${t("start")}</button>`}
@@ -743,21 +747,28 @@ function ScreenTab({ S, child, v, reload }) {
   const tomorrow = E.addDays(v.today, 1);
   const setAdj = (d, m) => run(async () => { await A.setScreenAdjust(child.id, d, m); await reload(); });
   return html`
-    <section class="panel"><h2>${t("screenAdjust")}</h2><p class="muted small">${t("screenAdjustHint")}</p>
-      ${[[v.today, t("today")], [tomorrow, "Besok"]].map(([d, label]) => { const base = E.screenLimit({ ...c, adjust: {} }, d); const adj = adjOf(d);
+    <section class="panel"><h2>${t("screenAdjust")}</h2><p class="muted small">${t("screenAdjustHint")}${c.mode === "weekly" ? " Pada mode per minggu, tambahan ini masuk ke jatah minggu tersebut." : ""}</p>
+      ${c.mode === "weekly" ? html`<div class="week"><div class="row wrap-row"><div class="grow"><b>Minggu ini</b><div class="muted small">Jatah ${E.screenWeekLimit(scr, ws)} menit${adjOf(v.today) ? ` (tambahan hari ini ${adjOf(v.today) > 0 ? "+" : ""}${adjOf(v.today)})` : ""}</div></div>
+          <${Stepper} value=${adjOf(v.today)} step=${15} min=${-(c.weeklyLimitMin || 0)} max=${600} suffix="mnt" onChange=${(n) => setAdj(v.today, n)} /></div></div>` : null}
+      ${(c.mode === "weekly" ? [] : [[v.today, t("today")], [tomorrow, "Besok"]]).map(([d, label]) => { const base = E.screenLimit({ ...c, adjust: {} }, d); const adj = adjOf(d);
         return html`<div class="week"><div class="row wrap-row"><div class="grow"><b>${label} · ${fmtDay(d)}</b><div class="muted small">Jatah ${base + adj} menit ${adj ? `(${adj > 0 ? "+" : ""}${adj})` : ""}</div></div>
           <${Stepper} value=${adj} step=${15} min=${-base} max=${240} suffix="mnt" onChange=${(n) => setAdj(d, n)} /></div></div>`; })}
     </section>
-    <section class="panel"><h2>Minggu ini</h2>
-      <div class="list">${[0, 1, 2, 3, 4, 5, 6].map((i) => { const d = E.addDays(ws, i); if (d > v.today || d < child.start_date) return null; const used = mins[d] || 0; const lim = E.screenLimit(scr, d);
+    <section class="panel"><div class="panel-head"><h2>Minggu ini</h2>${scr.mode === "weekly" ? html`<span class="muted">${(() => { let u = 0; for (let i = 0; i < 7; i++) { const d = E.addDays(ws, i); if (d >= child.start_date) u += mins[d] || 0; } return `${u} / ${E.screenWeekLimit(scr, ws)} menit`; })()}</span>` : null}</div>
+      <div class="list">${[0, 1, 2, 3, 4, 5, 6].map((i) => { const d = E.addDays(ws, i); if (d > v.today || d < child.start_date) return null; const used = mins[d] || 0; const lim = scr.mode === "weekly" ? E.screenWeekLimit(scr, ws) : E.screenLimit(scr, d);
         return html`<div class="item"><div class="main"><b>${fmtDay(d)}</b><div class="meter ${used <= lim ? "full" : ""}" style="margin-top:6px"><div style="width:${Math.min(100, lim ? (used / lim) * 100 : 100)}%"></div></div></div><span class="amt ${used > lim ? "neg" : "zero"}">${used}/${lim} mnt</span></div>`; })}</div>
       ${Object.keys(byDevice).length ? html`<p class="muted">${Object.entries(byDevice).map(([k, m]) => `${k}: ${m} mnt`).join(" · ")}</p>` : null}
     </section>
     <section class="panel"><h2>Aturan screentime</h2>
       <label class="check"><input type="checkbox" checked=${c.enabled !== false} onChange=${(e) => setC({ ...c, enabled: e.target.checked })} /> Screentime aktif</label>
+      <div class="f"><span class="muted small" style="font-weight:800">Jatah dihitung</span>
+        <div class="seg"><button type="button" aria-pressed=${c.mode !== "weekly"} onClick=${() => setC({ ...c, mode: "daily" })}>Per hari</button>
+          <button type="button" aria-pressed=${c.mode === "weekly"} onClick=${() => setC({ ...c, mode: "weekly", weeklyLimitMin: c.weeklyLimitMin ?? 300 })}>Per minggu</button></div>
+        <p class="muted small">${c.mode === "weekly" ? `Satu jatah untuk seminggu (${WEEKDAYS[E.weekday(child.period_anchor) - 1]}–${WEEKDAYS[(E.weekday(child.period_anchor) + 5) % 7]}, ikut siklus gajian). Terisi ulang tiap awal minggu.` : "Jatah terisi ulang setiap hari."}</p></div>
       <div class="form">
+        ${c.mode === "weekly" ? html`<${Stepper} label="Jatah per minggu" value=${c.weeklyLimitMin ?? 300} step=${15} min=${0} max=${3000} suffix="mnt" onChange=${num("weeklyLimitMin")} />` : html`
         <${Stepper} label="Jatah hari sekolah" value=${c.weekdayLimitMin} step=${15} min=${0} max=${600} suffix="mnt" onChange=${num("weekdayLimitMin")} />
-        <${Stepper} label="Jatah akhir pekan" value=${c.weekendLimitMin} step=${15} min=${0} max=${600} suffix="mnt" onChange=${num("weekendLimitMin")} />
+        <${Stepper} label="Jatah akhir pekan" value=${c.weekendLimitMin} step=${15} min=${0} max=${600} suffix="mnt" onChange=${num("weekendLimitMin")} />`}
         <${Stepper} label="Penalti tiap kelebihan" value=${c.overBlockMin} step=${5} min=${5} max=${120} suffix="mnt" onChange=${num("overBlockMin")} />
         <${Stepper} label="Poin penalti per blok" value=${c.overPenalty} max=${0} onChange=${num("overPenalty")} />
         <${Stepper} label="Hadiah tiap sisa" value=${c.leftoverBlockMin} step=${5} min=${5} max=${240} suffix="mnt" onChange=${num("leftoverBlockMin")} />

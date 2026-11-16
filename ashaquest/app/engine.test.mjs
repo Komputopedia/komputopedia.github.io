@@ -239,3 +239,32 @@ test("half units on a simple activity round toward zero", () => {
   assert.equal(E.entryPoints({ kind: "simple", points: 1 }, { qty: 1.5 }), 1);
   assert.equal(E.entryPoints({ kind: "simple", points: 2 }, { qty: 1.5 }), 3);
 });
+
+// ---- screen time as a weekly quota ----
+const weeklyScreen = { ...screen, mode: "weekly", weeklyLimitMin: 60, start_date: "2026-11-13" };
+
+test("weekly quota: no daily overtime, one weekly penalty when the week's total is over", () => {
+  // Friday cycle 13-19 Nov; 50 min Fri + 40 min Sat = 90 min, quota 60 -> 30 over -> 2 blocks of 15
+  const sessions = [
+    { started_at: "2026-11-13T15:00:00Z", ended_at: "2026-11-13T15:50:00Z" },
+    { started_at: "2026-11-14T15:00:00Z", ended_at: "2026-11-14T15:40:00Z" },
+  ];
+  const midweek = E.deriveAutoEntries({ today: "2026-11-16", weekAnchor: "2026-11-13", activities: [], entries: [], sessions, screen: weeklyScreen, tz: "Europe/Amsterdam" });
+  assert.equal(midweek.length, 0);
+  const closed = E.deriveAutoEntries({ today: "2026-11-20", weekAnchor: "2026-11-13", activities: [], entries: [], sessions, screen: weeklyScreen, tz: "Europe/Amsterdam" });
+  assert.deepEqual(closed.map((a) => [a.auto_key, a.points, a.date]), [["st-over-w:2026-11-13", -2, "2026-11-19"]]);
+});
+
+test("weekly quota: unused minutes of the week earn the reward", () => {
+  const sessions = [{ started_at: "2026-11-13T15:00:00Z", ended_at: "2026-11-13T15:20:00Z" }]; // 20 of 60 used
+  const autos = E.deriveAutoEntries({ today: "2026-11-20", weekAnchor: "2026-11-13", activities: [], entries: [], sessions, screen: weeklyScreen, tz: "Europe/Amsterdam" });
+  assert.deepEqual(autos.map((a) => [a.auto_key, a.points]), [["st-left:2026-11-13", 1]]); // 40 left -> one 30-min block
+});
+
+test("weekly quota: parent adjustments during the week add to the quota", () => {
+  const scr = { ...weeklyScreen, adjust: { "2026-11-15": 30 } };
+  assert.equal(E.screenWeekLimit(scr, "2026-11-13"), 90);
+  const sessions = [{ started_at: "2026-11-13T15:00:00Z", ended_at: "2026-11-13T16:30:00Z" }]; // 90 min
+  const autos = E.deriveAutoEntries({ today: "2026-11-20", weekAnchor: "2026-11-13", activities: [], entries: [], sessions, screen: scr, tz: "Europe/Amsterdam" });
+  assert.equal(autos.length, 0);
+});
