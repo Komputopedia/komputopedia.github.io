@@ -2,13 +2,13 @@
 import { h, render } from "https://esm.sh/preact@10.24.3";
 import { useState, useEffect, useMemo, useCallback, useRef } from "https://esm.sh/preact@10.24.3/hooks";
 import htm from "https://esm.sh/htm@3.1.1";
-import * as E from "./engine.js?v=202611192145";
-import * as A from "./api.js?v=202611192145";
-import * as Q from "./quran.js?v=202611192145";
-import { t, locale } from "./i18n.js?v=202611192145";
+import * as E from "./engine.js?v=202611192232";
+import * as A from "./api.js?v=202611192232";
+import * as Q from "./quran.js?v=202611192232";
+import { t, locale } from "./i18n.js?v=202611192232";
 
 const html = htm.bind(h);
-const APP_BUILD = "202611192145"; // set by bump-version.sh
+const APP_BUILD = "202611192232"; // set by bump-version.sh
 const VersionTag = () => html`<p class="muted small" style="text-align:center;opacity:.7">Asha Quest v0.2 · build ${APP_BUILD}</p>`;
 
 // ---------- formatting ----------
@@ -521,10 +521,10 @@ function ChildHome({ S, reload }) {
       <button class="linkbtn" onClick=${() => A.signOut()}>${t("signOut")}</button></header>
     ${themeOpen && html`<${ThemeSheet} theme=${child.theme} onSave=${async (th) => { await A.setMyTheme(th); await reload(); }} onClose=${() => setThemeOpen(false)} />`}
     <${Slideshow} S=${S} child=${child} />
-    <${QuranCard} v=${v} />
     <${SavingsHero} S=${S} child=${child} v=${v} />
     <${PrayerStrip} S=${S} child=${child} v=${v} reload=${reload} />
     <${ScreenCards} S=${S} child=${child} v=${v} reload=${reload} />
+    <${QuranCard} v=${v} />
     <${WeeklyCards} child=${child} v=${v} reload=${reload} />
     <${ActivityTiles} S=${S} child=${child} v=${v} reload=${reload} />
     <${ProposeForm} S=${S} child=${child} v=${v} reload=${reload} />
