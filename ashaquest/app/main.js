@@ -2,13 +2,13 @@
 import { h, render } from "https://esm.sh/preact@10.24.3";
 import { useState, useEffect, useMemo, useCallback, useRef } from "https://esm.sh/preact@10.24.3/hooks";
 import htm from "https://esm.sh/htm@3.1.1";
-import * as E from "./engine.js?v=202611192140";
-import * as A from "./api.js?v=202611192140";
-import * as Q from "./quran.js?v=202611192140";
-import { t, locale } from "./i18n.js?v=202611192140";
+import * as E from "./engine.js?v=202611192145";
+import * as A from "./api.js?v=202611192145";
+import * as Q from "./quran.js?v=202611192145";
+import { t, locale } from "./i18n.js?v=202611192145";
 
 const html = htm.bind(h);
-const APP_BUILD = "202611192140"; // set by bump-version.sh
+const APP_BUILD = "202611192145"; // set by bump-version.sh
 const VersionTag = () => html`<p class="muted small" style="text-align:center;opacity:.7">Asha Quest v0.2 · build ${APP_BUILD}</p>`;
 
 // ---------- formatting ----------
@@ -1018,6 +1018,18 @@ function AdminTab({ S, reload }) {
 }
 
 // =====================================================================
+/** Loading scene: a floating cloud under a rainbow that keeps drawing itself. */
+const RAINBOW = ["#ff8fa3", "#ffc36b", "#ffe680", "#8fdca0", "#86c5ff", "#b9a4ff"];
+const Loader = () => html`<div class="loader" role="status" aria-label=${t("loading")}>
+  <svg class="loader-sky" viewBox="0 0 200 120" aria-hidden="true">
+    <g class="loader-rainbow" fill="none" stroke-width="7" stroke-linecap="round">
+      ${RAINBOW.map((c, i) => html`<path d=${`M ${30 + i * 7} 100 A ${70 - i * 7} ${70 - i * 7} 0 0 1 ${170 - i * 7} 100`} stroke=${c} style=${`animation-delay:${i * 0.08}s`} />`)}
+    </g>
+    <g class="loader-cloud"><ellipse cx="100" cy="92" rx="34" ry="15" fill="#fff"/><circle cx="84" cy="84" r="15" fill="#fff"/><circle cx="106" cy="77" r="19" fill="#fff"/><circle cx="122" cy="88" r="12" fill="#fff"/></g>
+  </svg>
+  <div class="loader-dots" aria-hidden="true"><i></i><i></i><i></i></div>
+</div>`;
+
 function App() {
   const [session, setSession] = useState(undefined);
   const [S, setS] = useState(null);
@@ -1040,10 +1052,10 @@ function App() {
   }, [session?.user?.id]);
 
   let body;
-  if (session === undefined) body = html`<div class="wrap"><p class="muted">${t("loading")}</p></div>`;
+  if (session === undefined) body = html`<${Loader} />`;
   else if (!session) body = html`<${Login} />`;
   else if (err && !S) body = html`<div class="wrap"><div class="banner bad">${t("loadFail")}</div><button class="btn" onClick=${reload}>${t("retry")}</button></div>`;
-  else if (!S) body = html`<div class="wrap"><p class="muted">${t("loading")}</p></div>`;
+  else if (!S) body = html`<${Loader} />`;
   else if (!S.me) body = S.isAdmin ? html`<div class="wrap"><${AdminTab} S=${S} reload=${reload} /><button class="linkbtn" onClick=${() => A.signOut()}>${t("signOut")}</button></div>`
     : html`<div class="wrap"><div class="banner warn">${t("noFamily")}</div><button class="btn" onClick=${() => A.signOut()}>${t("signOut")}</button></div>`;
   else if (S.me.role === "child") body = html`<${ChildHome} S=${S} reload=${reload} />`;
