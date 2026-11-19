@@ -227,4 +227,14 @@ input[type="range"] { accent-color: var(--accent); width: 100%; }
 .surah-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 6px; margin-top: 8px; max-height: 260px; overflow-y: auto; }
 .surah-grid button { border: 2px solid var(--line); background: rgb(var(--card-rgb)); border-radius: 12px; padding: 8px 6px; font-weight: 800; font-size: 14px; color: var(--ink); text-align: left; }
 .surah-grid button small { display: block; color: var(--ink-2); font-weight: 700; font-size: 11px; }
-.quran-card .item b { font-family: var(--display); font-size: 18px; }
+.quran-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
+.quran-col { background: rgba(var(--card-rgb), .55); border-radius: 16px; padding: 12px 14px; border: 1px solid rgba(0,0,0,.05); }
+.qc-head { display: flex; align-items: center; gap: 8px; font-size: 17px; }
+.qc-head .em { font-size: 22px; }
+.qc-next { font-family: var(--display); font-weight: 700; font-size: 18px; color: var(--ink); margin: 4px 0 8px; }
+.qc-log { list-style: none; margin: 0; padding: 0; }
+.qc-log li { display: flex; gap: 10px; padding: 5px 0; border-top: 1px dashed rgba(0,0,0,.08); font-size: 14px; }
+.qc-log li:first-child { font-weight: 700; }
+.qc-log li.pending { opacity: .65; }
+.qc-day { min-width: 72px; color: var(--ink-2); }
+.qc-pos { flex: 1; }

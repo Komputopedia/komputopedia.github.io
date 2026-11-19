@@ -2,13 +2,13 @@
 import { h, render } from "https://esm.sh/preact@10.24.3";
 import { useState, useEffect, useMemo, useCallback, useRef } from "https://esm.sh/preact@10.24.3/hooks";
 import htm from "https://esm.sh/htm@3.1.1";
-import * as E from "./engine.js?v=202611192118";
-import * as A from "./api.js?v=202611192118";
-import * as Q from "./quran.js?v=202611192118";
-import { t, locale } from "./i18n.js?v=202611192118";
+import * as E from "./engine.js?v=202611192136";
+import * as A from "./api.js?v=202611192136";
+import * as Q from "./quran.js?v=202611192136";
+import { t, locale } from "./i18n.js?v=202611192136";
 
 const html = htm.bind(h);
-const APP_BUILD = "202611192118"; // set by bump-version.sh
+const APP_BUILD = "202611192136"; // set by bump-version.sh
 const VersionTag = () => html`<p class="muted small" style="text-align:center;opacity:.7">Asha Quest v0.2 · build ${APP_BUILD}</p>`;
 
 // ---------- formatting ----------
@@ -291,28 +291,35 @@ function WeeklyCards({ child, v, reload }) {
   </section>`;
 }
 
-/** Latest recorded Quran position for an activity. */
-function lastQuran(v, act) {
+/** Quran position records for an activity, newest first. */
+function quranLog(v, act) {
   return v.entries.filter((x) => x.activity_id === act.id && x.quran && x.status !== "rejected")
-    .sort((a, b) => (a.date === b.date ? (a.created_at < b.created_at ? 1 : -1) : a.date < b.date ? 1 : -1))[0] || null;
+    .sort((a, b) => (a.date === b.date ? (a.created_at < b.created_at ? 1 : -1) : a.date < b.date ? 1 : -1));
 }
 const fmtQuran = (q) => q ? `${Q.surahName(q.surah)} ${q.from === q.to ? "ayat " + q.from : "ayat " + q.from + "–" + q.to}` : "";
+const QURAN_LOG_MAX = 7;
 
 function QuranCard({ v }) {
   const acts = v.acts.filter((a) => a.track_quran && a.active);
-  const rows = acts.map((a) => [a, lastQuran(v, a)]).filter(([, e]) => e);
   if (!acts.length) return null;
+  const cols = acts.map((a) => [a, quranLog(v, a)]);
+  if (!cols.some(([, log]) => log.length)) return html`<section class="panel quran-card"><h2>${t("lastRead")}</h2><p class="muted">${t("noQuranYet")}</p></section>`;
   return html`<section class="panel quran-card"><h2>${t("lastRead")}</h2>
-    ${rows.length ? html`<div class="list">${rows.map(([a, e]) => { const nx = Q.nextPosition(e.quran);
-      return html`<div class="item"><span class="em">${a.emoji || "📖"}</span><div class="main"><b>${a.name}: ${fmtQuran(e.quran)}</b>
-        <span>${fmtDay(e.date)}${nx ? " · " + t("continueAt", { pos: Q.surahName(nx.surah) + " ayat " + nx.from }) : ""}</span></div></div>`; })}</div>`
-      : html`<p class="muted">${t("noQuranYet")}</p>`}
+    <div class="quran-cols">${cols.map(([a, log]) => {
+      const last = log[0]; const nx = last && Q.nextPosition(last.quran);
+      return html`<div class="quran-col">
+        <div class="qc-head"><span class="em">${a.emoji || "📖"}</span><b>${a.name}</b></div>
+        ${last ? html`<div class="qc-next">${nx ? t("continueAt", { pos: Q.surahName(nx.surah) + " ayat " + nx.from }) : fmtQuran(last.quran)}</div>
+          <ol class="qc-log">${log.slice(0, QURAN_LOG_MAX).map((e) => html`<li class=${e.status === "pending" ? "pending" : ""}>
+            <span class="qc-day">${fmtDay(e.date)}</span><span class="qc-pos">${fmtQuran(e.quran)}</span></li>`)}</ol>`
+          : html`<p class="muted small">${t("noQuranYetShort")}</p>`}
+      </div>`; })}</div>
   </section>`;
 }
 
 function QuranPicker({ v, act, value, onChange }) {
   const [q, setQ] = useState("");
-  const last = lastQuran(v, act);
+  const last = quranLog(v, act)[0] || null;
   const next = Q.nextPosition(last?.quran);
   const recent = [...new Set(v.entries.filter((x) => x.quran && x.activity_id === act.id).map((x) => x.quran.surah))].slice(0, 6);
   const pick = (surah, from = 1) => onChange({ surah, from, to: from });

@@ -49,7 +49,7 @@ const id = {
   errRemoveSelf: "Anda tidak bisa menghapus akun sendiri.", errLastParent: "Harus ada minimal satu orang tua.", errIsAdmin: "Akun admin Kids Quest tidak bisa dihapus dari sini.",
   errEmailTaken: "Email ini sudah dipakai akun lain.", errUsernameTaken: "Nama pengguna ini sudah dipakai di keluarga ini.",
   theme: "Tema", accentColor: "Warna aksen", cardOpacity: "Kepekatan kartu",
-  lastRead: "Terakhir dibaca", continueAt: "lanjut {pos}", noQuranYet: "Belum ada catatan surat. Pilih surat saat mencatat mengaji atau murajaah.",
+  lastRead: "Terakhir dibaca", continueAt: "lanjut {pos}", noQuranYet: "Belum ada catatan surat. Pilih surat saat mencatat mengaji atau murajaah.", noQuranYetShort: "Belum ada catatan.",
   change: "Ganti", fromAyat: "Dari ayat", toAyat: "Sampai ayat", whichSurah: "Surat apa? (boleh dilewati)", continueBtn: "Lanjut: {pos}",
   searchSurah: "Cari surat (nama atau nomor)", noSurah: "Surat tidak ditemukan.", otherTimer: "Timer {what} sedang berjalan. Selesaikan dulu.",
   // misc

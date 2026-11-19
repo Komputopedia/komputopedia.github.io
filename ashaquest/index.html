@@ -6,22 +6,22 @@
 <title>Asha Quest</title>
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#dcefff">
-<link rel="icon" href="app/cloud.svg?v=202611192118">
-<link rel="apple-touch-icon" href="app/cloud.svg?v=202611192118">
+<link rel="icon" href="app/cloud.svg?v=202611192136">
+<link rel="apple-touch-icon" href="app/cloud.svg?v=202611192136">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="app/style.css?v=202611192118">
+<link rel="stylesheet" href="app/style.css?v=202611192136">
 <style>
   /* Opening scene: a garden with a flowing river, rainbow and drifting clouds. Shown until the app is ready. */
-  #splash { position: fixed; inset: 0; z-index: 50; background: linear-gradient(#bfe3ff 0%, #e6f4ff 55%, #fdf3e1 100%); display: flex; align-items: center; justify-content: center; cursor: pointer; transition: opacity .6s ease; }
+  #splash { position: fixed; inset: 0; z-index: 50; background: linear-gradient(#bfe3ff 0%, #e6f4ff 55%, #fdf3e1 100%); display: flex; align-items: center; justify-content: center; cursor: pointer; transition: opacity .3s ease; }
   #splash.hide { opacity: 0; pointer-events: none; }
   #splash svg { width: 100%; height: 100%; display: block; }
-  #splash .title { position: absolute; left: 0; right: 0; top: 13%; text-align: center; font-family: "Baloo 2", Nunito, system-ui, sans-serif; font-weight: 800; font-size: clamp(34px, 8vw, 64px); color: #1f3b63; text-shadow: 0 2px 12px rgba(255,255,255,.9); opacity: 0; animation: kqFade 1s .4s ease forwards; }
+  #splash .title { position: absolute; left: 0; right: 0; top: 13%; text-align: center; font-family: "Baloo 2", Nunito, system-ui, sans-serif; font-weight: 800; font-size: clamp(34px, 8vw, 64px); color: #1f3b63; text-shadow: 0 2px 12px rgba(255,255,255,.9); opacity: 0; animation: kqFade .45s .1s ease forwards; }
   #splash .title small { display: block; font-family: Nunito, system-ui, sans-serif; font-weight: 700; font-size: clamp(14px, 3vw, 18px); color: #5d7697; }
-  #splash .rainbow path { stroke-dasharray: 1400; stroke-dashoffset: 1400; animation: kqDraw 1.6s ease forwards; }
-  #splash .rainbow path:nth-child(2) { animation-delay: .15s; } #splash .rainbow path:nth-child(3) { animation-delay: .3s; }
-  #splash .rainbow path:nth-child(4) { animation-delay: .45s; } #splash .rainbow path:nth-child(5) { animation-delay: .6s; }
+  #splash .rainbow path { stroke-dasharray: 1400; stroke-dashoffset: 1400; animation: kqDraw .7s ease forwards; }
+  #splash .rainbow path:nth-child(2) { animation-delay: .05s; } #splash .rainbow path:nth-child(3) { animation-delay: .1s; }
+  #splash .rainbow path:nth-child(4) { animation-delay: .15s; } #splash .rainbow path:nth-child(5) { animation-delay: .2s; }
   #splash .cloud { animation: kqDrift 9s linear infinite; }
   #splash .cloud.c2 { animation-duration: 13s; animation-delay: -4s; } #splash .cloud.c3 { animation-duration: 11s; animation-delay: -8s; }
   #splash .shine { stroke-dasharray: 18 26; animation: kqFlow 1.4s linear infinite; }
@@ -79,10 +79,10 @@
     var start = Date.now(), el = document.getElementById("splash"), done = false;
     function hide() { if (done) return; done = true; el.classList.add("hide"); setTimeout(function () { el.remove(); }, 700); }
     el.addEventListener("click", hide);
-    window.kqReady = function () { setTimeout(hide, Math.max(0, 1800 - (Date.now() - start))); };
+    window.kqReady = function () { setTimeout(hide, Math.max(0, 1000 - (Date.now() - start))); };
     setTimeout(hide, 12000); // never block the app for long
   })();
 </script>
-<script type="module" src="app/main.js?v=202611192118"></script>
+<script type="module" src="app/main.js?v=202611192136"></script>
 </body>
 </html>
