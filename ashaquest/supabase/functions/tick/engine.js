@@ -87,6 +87,22 @@ export function screenWeekLimit(screen, weekStartDay) {
   return lim;
 }
 
+/**
+ * Screen quotas of a child. Each quota has its own devices (null = every device), its own mode and limits,
+ * and its own per-day adjustments; penalty and reward settings are shared. The old single setting becomes
+ * one quota with id "main".
+ */
+export function quotasOf(screen) {
+  if (!screen || screen.enabled === false) return [];
+  const shared = { overBlockMin: screen.overBlockMin, overPenalty: screen.overPenalty, leftoverBlockMin: screen.leftoverBlockMin,
+    leftoverPointsPerBlock: screen.leftoverPointsPerBlock, warnMin: screen.warnMin, start_date: screen.start_date };
+  if (Array.isArray(screen.quotas) && screen.quotas.length) {
+    return screen.quotas.map((q) => ({ ...shared, ...q, deviceIds: q.deviceIds && q.deviceIds.length ? q.deviceIds : null,
+      adjust: screen.adjustByQuota?.[q.id] || (q.id === "main" ? screen.adjust : null) || {} }));
+  }
+  return [{ ...screen, id: "main", name: screen.name || "Screentime", deviceIds: null, adjust: screen.adjust || screen.adjustByQuota?.main || {} }];
+}
+
 /** Logged (not automatic, not rejected) entries of an activity on a day, for daily limits. */
 export function countToday(entries, activityId, day) { return entries.filter((x) => x.activity_id === activityId && x.date === day && !x.auto_key && LIVE.has(x.status)).length; }
 
@@ -131,27 +147,29 @@ export function deriveAutoEntries({ today, fromDate, activities = [], entries = 
     }
   }
 
-  if (screen) {
-    const start = from(screen.start_date || today);
-    const mins = screenMinutesByDay(sessions, tz);
-    const weekly = screen.mode === "weekly";
+  for (const q of quotasOf(screen)) {
+    const start = from(q.start_date || today);
+    const mins = screenMinutesByDay(q.deviceIds ? sessions.filter((x) => q.deviceIds.includes(x.device_id)) : sessions, tz);
+    const weekly = q.mode === "weekly";
+    const sfx = q.id === "main" ? "" : q.id + ":"; // the original quota keeps its original keys
+    const label = (base) => (q.id === "main" ? base : base + " · " + (q.name || q.id));
     for (let d = start; !weekly && d <= lastClosed; d = addDays(d, 1)) {
-      const over = (mins[d] || 0) - screenLimit(screen, d);
-      if (over > 0) push({ auto_key: "st-over:" + d, date: d, points: Math.ceil(over / screen.overBlockMin) * screen.overPenalty, title: "Screentime lebih", emoji: "⏰", kind: "screen" });
+      const over = (mins[d] || 0) - screenLimit(q, d);
+      if (over > 0) push({ auto_key: "st-over:" + sfx + d, date: d, points: Math.ceil(over / q.overBlockMin) * q.overPenalty, title: label("Screentime lebih"), emoji: "⏰", kind: "screen" });
     }
     for (let w = wk(start); addDays(w, 6) <= lastClosed; w = addDays(w, 7)) {
       let left = 0;
       if (weekly) {
         let used = 0;
         for (let i = 0; i < 7; i++) { const d = addDays(w, i); if (d >= start) used += mins[d] || 0; }
-        const lim = screenWeekLimit(screen, w);
-        if (used > lim) push({ auto_key: "st-over-w:" + w, date: addDays(w, 6), qty: used - lim, points: Math.ceil((used - lim) / screen.overBlockMin) * screen.overPenalty, title: "Screentime lebih", emoji: "⏰", kind: "screen" });
+        const lim = screenWeekLimit(q, w);
+        if (used > lim) push({ auto_key: "st-over-w:" + sfx + w, date: addDays(w, 6), qty: used - lim, points: Math.ceil((used - lim) / q.overBlockMin) * q.overPenalty, title: label("Screentime lebih"), emoji: "⏰", kind: "screen" });
         left = Math.max(0, lim - used);
       } else {
-        for (let i = 0; i < 7; i++) { const d = addDays(w, i); if (d >= start) left += Math.max(0, screenLimit(screen, d) - (mins[d] || 0)); }
+        for (let i = 0; i < 7; i++) { const d = addDays(w, i); if (d >= start) left += Math.max(0, screenLimit(q, d) - (mins[d] || 0)); }
       }
-      const pts = Math.floor(left / screen.leftoverBlockMin) * screen.leftoverPointsPerBlock;
-      if (pts > 0) push({ auto_key: "st-left:" + w, date: addDays(w, 6), qty: left, points: pts, title: "Hemat screentime", emoji: "🌤️", kind: "screen" });
+      const pts = Math.floor(left / q.leftoverBlockMin) * q.leftoverPointsPerBlock;
+      if (pts > 0) push({ auto_key: "st-left:" + sfx + w, date: addDays(w, 6), qty: left, points: pts, title: label("Hemat screentime"), emoji: "🌤️", kind: "screen" });
     }
   }
   return out;

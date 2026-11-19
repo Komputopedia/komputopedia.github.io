@@ -9,8 +9,12 @@ const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SE
 function localHour(tz: string) {
   return Number(new Intl.DateTimeFormat("en-GB", { timeZone: tz, hour: "2-digit", hourCycle: "h23" }).format(new Date()));
 }
-const screenCfg = (c: any, adj: any[]) => c.screen?.enabled === false ? null
-  : { ...c.screen, start_date: c.start_date, adjust: Object.fromEntries(adj.map((x: any) => [x.date, x.minutes])) };
+function screenCfg(c: any, adj: any[]) {
+  if (c.screen?.enabled === false) return null;
+  const adjustByQuota: Record<string, Record<string, number>> = {};
+  for (const x of adj) (adjustByQuota[x.quota_id || "main"] ||= {})[x.date] = x.minutes;
+  return { ...c.screen, start_date: c.start_date, adjustByQuota };
+}
 
 async function tickChild(f: any, c: any, today: string, log: string[]) {
   // 1. forgotten timers stop at 23:59 of the day they started
@@ -32,9 +36,9 @@ async function tickChild(f: any, c: any, today: string, log: string[]) {
   const [acts, ents, sess, exc, adj] = await Promise.all([
     db.from("activities").select("*").eq("child_id", c.id),
     db.from("entries").select("id,activity_id,date,status,qty,auto_key").eq("child_id", c.id).gte("date", E.addDays(from, -7)),
-    db.from("screen_sessions").select("started_at,ended_at").eq("child_id", c.id).gte("started_at", new Date(E.localMidnight(E.addDays(from, -1), f.timezone)).toISOString()),
+    db.from("screen_sessions").select("device_id,started_at,ended_at").eq("child_id", c.id).gte("started_at", new Date(E.localMidnight(E.addDays(from, -1), f.timezone)).toISOString()),
     c.excused_enabled ? db.from("excused_days").select("date").eq("child_id", c.id) : Promise.resolve({ data: [] }),
-    db.from("screen_adjust").select("date,minutes").eq("child_id", c.id).gte("date", from),
+    db.from("screen_adjust").select("date,minutes,quota_id").eq("child_id", c.id).gte("date", from),
   ]);
   const autos = E.deriveAutoEntries({
     today, fromDate: from, activities: acts.data || [], entries: ents.data || [],

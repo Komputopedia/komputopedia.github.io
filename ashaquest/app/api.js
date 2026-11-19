@@ -1,6 +1,6 @@
 // Data access for Kids Quest. All security is enforced by the database (RLS); this file only shapes calls.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
-import * as E from "./engine.js?v=202611161238";
+import * as E from "./engine.js?v=202611192118";
 
 export const SUPABASE_URL = "https://giedyhskakaarfxylrsy.supabase.co";
 const PUBLISHABLE_KEY = "sb_publishable_E_Ffj6dlK78QeMOHKYp6gA_YIZhCxKv"; // safe to publish; access is governed by RLS
@@ -10,8 +10,12 @@ export const childEmail = (code, username) => `${username}.${code}@kids.kidsques
 const BUCKET = "family-media";
 
 /** Screen settings for the engine, with this child's per-day adjustments. */
-export const screenFor = (state, child) => child.screen?.enabled === false ? null
-  : { ...child.screen, start_date: child.start_date, adjust: Object.fromEntries((state.adjust || []).filter((a) => a.child_id === child.id).map((a) => [a.date, a.minutes])) };
+export function screenFor(state, child) {
+  if (child.screen?.enabled === false) return null;
+  const adjustByQuota = {};
+  for (const a of (state.adjust || []).filter((x) => x.child_id === child.id)) (adjustByQuota[a.quota_id || "main"] ||= {})[a.date] = a.minutes;
+  return { ...child.screen, start_date: child.start_date, adjustByQuota };
+}
 
 async function must(q) {
   const r = await q;
@@ -64,8 +68,9 @@ export async function loadAll() {
 }
 
 // ---------- child actions ----------
-export const logEntry = (childId, activity, { date, qty, outcome_key, note }) =>
-  must(sb.from("entries").insert({ child_id: childId, activity_id: activity.id, title: activity.name, date, qty: qty ?? null, outcome_key: outcome_key || null, note: note || null, status: "pending", source: "child" }));
+export const logEntry = (childId, activity, { date, qty, outcome_key, note, quran }) =>
+  must(sb.from("entries").insert({ child_id: childId, activity_id: activity.id, title: activity.name, date, qty: qty ?? null, outcome_key: outcome_key || null, note: note || null, quran: quran || null, status: "pending", source: "child" }));
+export const setMyTheme = (theme) => must(sb.rpc("set_my_theme", { p_theme: theme }));
 export const proposeEntry = (childId, { title, emoji, category_id, requested_points, date, note }) =>
   must(sb.from("entries").insert({ child_id: childId, title, emoji: emoji || "💡", category_id: category_id || null, requested_points, date, note: note || null, status: "pending", source: "proposal" }));
 export const askSpend = (childId, { category_id, cents, note, date }) =>
@@ -86,10 +91,10 @@ export async function decideEntry(uid, entry, ok, extra = {}, allEntries = []) {
   }
 }
 export const setEntryStatus = (uid, id, status) => must(sb.from("entries").update({ status, ...stamp(uid) }).eq("id", id));
-export const parentLog = (uid, childId, activity, { date, qty, outcome_key, note, points }) =>
+export const parentLog = (uid, childId, activity, { date, qty, outcome_key, note, points, quran }) =>
   must(sb.from("entries").insert({
     child_id: childId, activity_id: activity?.id || null, category_id: activity?.category_id || null, title: activity?.name || note || "Catatan",
-    emoji: activity?.emoji || "⭐", date, qty: qty ?? null, outcome_key: outcome_key || null, note: note || null,
+    emoji: activity?.emoji || "⭐", date, qty: qty ?? null, outcome_key: outcome_key || null, note: note || null, quran: quran || null,
     points: activity ? E.entryPoints(activity, { qty, outcome_key }) : points, status: "approved", source: "parent", ...stamp(uid),
   }));
 export const decideTx = (uid, id, ok) => must(sb.from("money_tx").update({ status: ok ? "approved" : "rejected", ...stamp(uid) }).eq("id", id));
@@ -170,9 +175,9 @@ export const addStar = (childId, { note, emoji, date }) => must(sb.from("stars")
 export const deleteStar = (id) => must(sb.from("stars").delete().eq("id", id));
 
 // ---------- screen limit adjustment for one day ----------
-export const setScreenAdjust = (childId, date, minutes) => minutes
-  ? must(sb.from("screen_adjust").upsert({ child_id: childId, date, minutes }, { onConflict: "child_id,date" }))
-  : must(sb.from("screen_adjust").delete().eq("child_id", childId).eq("date", date));
+export const setScreenAdjust = (childId, date, minutes, quotaId = "main") => minutes
+  ? must(sb.from("screen_adjust").upsert({ child_id: childId, date, minutes, quota_id: quotaId }, { onConflict: "child_id,date,quota_id" }))
+  : must(sb.from("screen_adjust").delete().eq("child_id", childId).eq("date", date).eq("quota_id", quotaId));
 
 // ---------- photos ----------
 /** Shrink an image to at most `max` px on the long side, as JPEG, before upload. */

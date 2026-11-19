@@ -268,3 +268,39 @@ test("weekly quota: parent adjustments during the week add to the quota", () => 
   const autos = E.deriveAutoEntries({ today: "2026-11-20", weekAnchor: "2026-11-13", activities: [], entries: [], sessions, screen: scr, tz: "Europe/Amsterdam" });
   assert.equal(autos.length, 0);
 });
+
+// ---- several screen quotas, each with its own devices ----
+const multi = {
+  enabled: true, overBlockMin: 15, overPenalty: -1, leftoverBlockMin: 30, leftoverPointsPerBlock: 1, start_date: "2026-11-13",
+  quotas: [
+    { id: "main", name: "Switch", mode: "weekly", weeklyLimitMin: 60, deviceIds: ["switch"] },
+    { id: "ipad", name: "iPad", mode: "daily", weekdayLimitMin: 30, weekendLimitMin: 30, deviceIds: ["ipad", "yt"] },
+  ],
+  adjustByQuota: { ipad: { "2026-11-16": 15 } },
+};
+
+test("quotas count only their own devices", () => {
+  const sessions = [
+    { device_id: "ipad", started_at: "2026-11-16T15:00:00Z", ended_at: "2026-11-16T15:50:00Z" }, // 50 min iPad Monday; limit 30+15
+    { device_id: "switch", started_at: "2026-11-16T17:00:00Z", ended_at: "2026-11-16T17:40:00Z" }, // 40 min Switch, weekly
+  ];
+  const autos = E.deriveAutoEntries({ today: "2026-11-17", weekAnchor: "2026-11-13", activities: [], entries: [], sessions, screen: multi, tz: "Europe/Amsterdam" });
+  assert.deepEqual(autos.map((a) => [a.auto_key, a.points]), [["st-over:ipad:2026-11-16", -1]]);
+});
+
+test("the original quota keeps its old keys, new quotas get their own", () => {
+  const sessions = [{ device_id: "switch", started_at: "2026-11-14T15:00:00Z", ended_at: "2026-11-14T16:30:00Z" }]; // 90 of 60
+  const autos = E.deriveAutoEntries({ today: "2026-11-20", weekAnchor: "2026-11-13", activities: [], entries: [], sessions, screen: multi, tz: "Europe/Amsterdam" });
+  const keys = autos.map((a) => a.auto_key);
+  assert.ok(keys.includes("st-over-w:2026-11-13"));
+  assert.ok(keys.includes("st-left:ipad:2026-11-13")); // iPad unused all week
+  assert.ok(!keys.includes("st-left:2026-11-13"));
+});
+
+test("quotasOf turns the old single setting into one quota covering all devices", () => {
+  const q = E.quotasOf({ enabled: true, mode: "weekly", weeklyLimitMin: 60, adjust: { "2026-11-14": 10 } });
+  assert.equal(q.length, 1);
+  assert.equal(q[0].id, "main");
+  assert.equal(q[0].deviceIds, null);
+  assert.equal(E.screenWeekLimit(q[0], "2026-11-13"), 70);
+});

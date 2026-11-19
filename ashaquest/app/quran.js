@@ -1,0 +1,40 @@
+// The 114 surahs: Indonesian transliteration and number of ayat (total 6236).
+export const SURAH = [
+  ["Al-Fatihah", 7], ["Al-Baqarah", 286], ["Ali 'Imran", 200], ["An-Nisa'", 176], ["Al-Ma'idah", 120], ["Al-An'am", 165],
+  ["Al-A'raf", 206], ["Al-Anfal", 75], ["At-Taubah", 129], ["Yunus", 109], ["Hud", 123], ["Yusuf", 111], ["Ar-Ra'd", 43],
+  ["Ibrahim", 52], ["Al-Hijr", 99], ["An-Nahl", 128], ["Al-Isra'", 111], ["Al-Kahf", 110], ["Maryam", 98], ["Taha", 135],
+  ["Al-Anbiya'", 112], ["Al-Hajj", 78], ["Al-Mu'minun", 118], ["An-Nur", 64], ["Al-Furqan", 77], ["Asy-Syu'ara'", 227],
+  ["An-Naml", 93], ["Al-Qasas", 88], ["Al-'Ankabut", 69], ["Ar-Rum", 60], ["Luqman", 34], ["As-Sajdah", 30], ["Al-Ahzab", 73],
+  ["Saba'", 54], ["Fatir", 45], ["Yasin", 83], ["As-Saffat", 182], ["Sad", 88], ["Az-Zumar", 75], ["Gafir", 85], ["Fussilat", 54],
+  ["Asy-Syura", 53], ["Az-Zukhruf", 89], ["Ad-Dukhan", 59], ["Al-Jasiyah", 37], ["Al-Ahqaf", 35], ["Muhammad", 38], ["Al-Fath", 29],
+  ["Al-Hujurat", 18], ["Qaf", 45], ["Az-Zariyat", 60], ["At-Tur", 49], ["An-Najm", 62], ["Al-Qamar", 55], ["Ar-Rahman", 78],
+  ["Al-Waqi'ah", 96], ["Al-Hadid", 29], ["Al-Mujadalah", 22], ["Al-Hasyr", 24], ["Al-Mumtahanah", 13], ["As-Saff", 14],
+  ["Al-Jumu'ah", 11], ["Al-Munafiqun", 11], ["At-Tagabun", 18], ["At-Talaq", 12], ["At-Tahrim", 12], ["Al-Mulk", 30], ["Al-Qalam", 52],
+  ["Al-Haqqah", 52], ["Al-Ma'arij", 44], ["Nuh", 28], ["Al-Jinn", 28], ["Al-Muzzammil", 20], ["Al-Muddassir", 56], ["Al-Qiyamah", 40],
+  ["Al-Insan", 31], ["Al-Mursalat", 50], ["An-Naba'", 40], ["An-Nazi'at", 46], ["'Abasa", 42], ["At-Takwir", 29], ["Al-Infitar", 19],
+  ["Al-Mutaffifin", 36], ["Al-Insyiqaq", 25], ["Al-Buruj", 22], ["At-Tariq", 17], ["Al-A'la", 19], ["Al-Gasyiyah", 26], ["Al-Fajr", 30],
+  ["Al-Balad", 20], ["Asy-Syams", 15], ["Al-Lail", 21], ["Ad-Duha", 11], ["Asy-Syarh", 8], ["At-Tin", 8], ["Al-'Alaq", 19], ["Al-Qadr", 5],
+  ["Al-Bayyinah", 8], ["Az-Zalzalah", 8], ["Al-'Adiyat", 11], ["Al-Qari'ah", 11], ["At-Takasur", 8], ["Al-'Asr", 3], ["Al-Humazah", 9],
+  ["Al-Fil", 5], ["Quraisy", 4], ["Al-Ma'un", 7], ["Al-Kausar", 3], ["Al-Kafirun", 6], ["An-Nasr", 3], ["Al-Lahab", 5], ["Al-Ikhlas", 4],
+  ["Al-Falaq", 5], ["An-Nas", 6],
+];
+export const surahName = (n) => (SURAH[n - 1] || [""])[0];
+export const ayatCount = (n) => (SURAH[n - 1] || [0, 0])[1];
+
+const plain = (s) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+/** Surahs matching a name fragment ("mulk", "al mulk") or a number ("67"). */
+export function searchSurah(q) {
+  const t = plain(q);
+  if (!t) return [];
+  if (/^\d+$/.test(t)) { const n = Number(t); return n >= 1 && n <= 114 ? [n] : []; }
+  return SURAH.map((s, i) => i + 1).filter((n) => plain(surahName(n)).includes(t) || plain(surahName(n).replace(/^(al|an|ar|as|asy|at|az|ad)-/i, "")).startsWith(t));
+}
+
+/** Where to continue after the last recorded position: the next ayat, or the next surah. */
+export function nextPosition(last) {
+  if (!last) return null;
+  if (last.to < ayatCount(last.surah)) return { surah: last.surah, from: last.to + 1 };
+  return last.surah < 114 ? { surah: last.surah + 1, from: 1 } : null;
+}
+
+export const JUZ_AMMA = Array.from({ length: 37 }, (_, i) => 78 + i); // 78-114

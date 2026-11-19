@@ -6,16 +6,83 @@
 <title>Asha Quest</title>
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#dcefff">
-<link rel="icon" href="app/cloud.svg?v=202611161238">
-<link rel="apple-touch-icon" href="app/cloud.svg?v=202611161238">
+<link rel="icon" href="app/cloud.svg?v=202611192118">
+<link rel="apple-touch-icon" href="app/cloud.svg?v=202611192118">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="app/style.css?v=202611161238">
+<link rel="stylesheet" href="app/style.css?v=202611192118">
+<style>
+  /* Opening scene: a garden with a flowing river, rainbow and drifting clouds. Shown until the app is ready. */
+  #splash { position: fixed; inset: 0; z-index: 50; background: linear-gradient(#bfe3ff 0%, #e6f4ff 55%, #fdf3e1 100%); display: flex; align-items: center; justify-content: center; cursor: pointer; transition: opacity .6s ease; }
+  #splash.hide { opacity: 0; pointer-events: none; }
+  #splash svg { width: 100%; height: 100%; display: block; }
+  #splash .title { position: absolute; left: 0; right: 0; top: 13%; text-align: center; font-family: "Baloo 2", Nunito, system-ui, sans-serif; font-weight: 800; font-size: clamp(34px, 8vw, 64px); color: #1f3b63; text-shadow: 0 2px 12px rgba(255,255,255,.9); opacity: 0; animation: kqFade 1s .4s ease forwards; }
+  #splash .title small { display: block; font-family: Nunito, system-ui, sans-serif; font-weight: 700; font-size: clamp(14px, 3vw, 18px); color: #5d7697; }
+  #splash .rainbow path { stroke-dasharray: 1400; stroke-dashoffset: 1400; animation: kqDraw 1.6s ease forwards; }
+  #splash .rainbow path:nth-child(2) { animation-delay: .15s; } #splash .rainbow path:nth-child(3) { animation-delay: .3s; }
+  #splash .rainbow path:nth-child(4) { animation-delay: .45s; } #splash .rainbow path:nth-child(5) { animation-delay: .6s; }
+  #splash .cloud { animation: kqDrift 9s linear infinite; }
+  #splash .cloud.c2 { animation-duration: 13s; animation-delay: -4s; } #splash .cloud.c3 { animation-duration: 11s; animation-delay: -8s; }
+  #splash .shine { stroke-dasharray: 18 26; animation: kqFlow 1.4s linear infinite; }
+  #splash .shine.s2 { animation-duration: 1.9s; }
+  #splash .bloom { transform-box: fill-box; transform-origin: center; animation: kqBloom 2.4s ease-in-out infinite; }
+  #splash .bloom:nth-child(2n) { animation-delay: .6s; } #splash .bloom:nth-child(3n) { animation-delay: 1.2s; }
+  @keyframes kqDraw { to { stroke-dashoffset: 0; } }
+  @keyframes kqDrift { from { transform: translateX(-260px); } to { transform: translateX(1260px); } }
+  @keyframes kqFlow { to { stroke-dashoffset: -44; } }
+  @keyframes kqBloom { 50% { transform: scale(1.25); } }
+  @keyframes kqFade { to { opacity: 1; } }
+  @media (prefers-reduced-motion: reduce) { #splash * { animation: none !important; } #splash .rainbow path { stroke-dashoffset: 0; } #splash .title { opacity: 1; } }
+</style>
 </head>
 <body>
-<div id="app"><p style="padding:24px;font-family:sans-serif">Memuat Asha Quest…</p></div>
+<div id="splash" role="img" aria-label="Asha Quest dibuka">
+  <svg viewBox="0 0 1000 700" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+    <defs>
+      <radialGradient id="sun" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#fff7d6"/><stop offset="1" stop-color="#fff7d6" stop-opacity="0"/></radialGradient>
+      <linearGradient id="river" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#9fdcff"/><stop offset="1" stop-color="#5cb8f0"/></linearGradient>
+    </defs>
+    <circle cx="790" cy="170" r="150" fill="url(#sun)"/>
+    <g class="rainbow" fill="none" stroke-width="16" stroke-linecap="round" opacity=".85">
+      <path d="M140 520 A360 360 0 0 1 860 520" stroke="#ffb3c9"/>
+      <path d="M156 520 A344 344 0 0 1 844 520" stroke="#ffd59a"/>
+      <path d="M172 520 A328 328 0 0 1 828 520" stroke="#fff1a0"/>
+      <path d="M188 520 A312 312 0 0 1 812 520" stroke="#b6ecc4"/>
+      <path d="M204 520 A296 296 0 0 1 796 520" stroke="#a9dcff"/>
+    </g>
+    <g class="cloud"><path d="M90 150c-22 0-30-18-20-30-10-18 10-34 28-26 6-24 40-28 52-8 18-10 44 4 38 24 18 8 12 40-12 40z" fill="#fff" opacity=".95"/></g>
+    <g class="cloud c2"><path d="M60 250c-16 0-22-13-14-22-7-13 7-25 20-19 4-17 29-20 37-6 13-7 31 3 27 17 13 6 9 30-9 30z" fill="#fff" opacity=".9"/></g>
+    <g class="cloud c3"><path d="M120 90c-12 0-17-10-11-17-6-10 6-19 15-14 3-13 22-15 28-4 10-5 24 2 21 13 10 4 7 22-7 22z" fill="#fff" opacity=".85"/></g>
+    <path d="M0 520 C150 460 300 470 450 505 C600 540 760 470 1000 495 L1000 700 L0 700 Z" fill="#9fdc9a"/>
+    <path d="M0 560 C200 520 360 545 520 570 C700 598 850 540 1000 560 L1000 700 L0 700 Z" fill="#7fcd85"/>
+    <path d="M430 700 C470 640 520 600 600 575 C680 552 760 548 840 540 L900 548 C820 560 730 572 660 600 C590 628 560 660 545 700 Z" fill="url(#river)"/>
+    <path class="shine" d="M520 690 C560 640 610 610 680 590 C740 574 800 565 860 555" fill="none" stroke="#ffffff" stroke-width="5" stroke-linecap="round" opacity=".8"/>
+    <path class="shine s2" d="M560 692 C590 655 630 628 700 606 C750 590 810 580 870 566" fill="none" stroke="#e8f7ff" stroke-width="3" stroke-linecap="round" opacity=".9"/>
+    <g>
+      <circle class="bloom" cx="120" cy="600" r="9" fill="#ffb3c9"/><circle class="bloom" cx="180" cy="625" r="7" fill="#fff1a0"/>
+      <circle class="bloom" cx="250" cy="595" r="8" fill="#ffffff"/><circle class="bloom" cx="320" cy="640" r="9" fill="#ffd59a"/>
+      <circle class="bloom" cx="380" cy="610" r="6" fill="#ffb3c9"/><circle class="bloom" cx="700" cy="650" r="8" fill="#fff1a0"/>
+      <circle class="bloom" cx="780" cy="625" r="9" fill="#ffb3c9"/><circle class="bloom" cx="860" cy="660" r="7" fill="#ffffff"/>
+      <circle class="bloom" cx="930" cy="615" r="8" fill="#ffd59a"/><circle class="bloom" cx="60" cy="660" r="7" fill="#ffffff"/>
+    </g>
+    <g fill="#5fb36a"><path d="M110 520 q10-70 0-110 q-10 40 0 110z"/><path d="M890 500 q10-70 0-110 q-10 40 0 110z"/></g>
+    <g fill="#4aa35a"><circle cx="110" cy="405" r="34"/><circle cx="890" cy="385" r="34"/><circle cx="85" cy="425" r="24"/><circle cx="915" cy="405" r="24"/></g>
+  </svg>
+  <div class="title">Asha Quest<small>Bismillah, ayo mulai 🌤️</small></div>
+</div>
+<div id="app"></div>
 <noscript>Asha Quest membutuhkan JavaScript.</noscript>
-<script type="module" src="app/main.js?v=202611161238"></script>
+<script>
+  // Tap to skip; the app also hides it once it is ready (main.js calls window.kqReady()).
+  (function () {
+    var start = Date.now(), el = document.getElementById("splash"), done = false;
+    function hide() { if (done) return; done = true; el.classList.add("hide"); setTimeout(function () { el.remove(); }, 700); }
+    el.addEventListener("click", hide);
+    window.kqReady = function () { setTimeout(hide, Math.max(0, 1800 - (Date.now() - start))); };
+    setTimeout(hide, 12000); // never block the app for long
+  })();
+</script>
+<script type="module" src="app/main.js?v=202611192118"></script>
 </body>
 </html>

@@ -2,12 +2,13 @@
 import { h, render } from "https://esm.sh/preact@10.24.3";
 import { useState, useEffect, useMemo, useCallback, useRef } from "https://esm.sh/preact@10.24.3/hooks";
 import htm from "https://esm.sh/htm@3.1.1";
-import * as E from "./engine.js?v=202611161238";
-import * as A from "./api.js?v=202611161238";
-import { t, locale } from "./i18n.js?v=202611161238";
+import * as E from "./engine.js?v=202611192118";
+import * as A from "./api.js?v=202611192118";
+import * as Q from "./quran.js?v=202611192118";
+import { t, locale } from "./i18n.js?v=202611192118";
 
 const html = htm.bind(h);
-const APP_BUILD = "202611161238"; // set by bump-version.sh
+const APP_BUILD = "202611192118"; // set by bump-version.sh
 const VersionTag = () => html`<p class="muted small" style="text-align:center;opacity:.7">Asha Quest v0.2 · build ${APP_BUILD}</p>`;
 
 // ---------- formatting ----------
@@ -40,6 +41,41 @@ const Mascot = ({ size = 56 }) => html`<svg width=${size} height=${Math.round(si
   <path d="M17 58c-8 0-12-6-9-12-5-5-1-14 7-13 1-9 12-13 19-7 4-7 16-7 19 2 8-1 13 7 9 13 6 3 4 17-6 17z" fill="url(#kqc)" stroke="#a9cdee" stroke-width="2.2" stroke-linejoin="round"/>
   <path d="M60 8l1.6 3.4L65 13l-3.4 1.6L60 18l-1.6-3.4L55 13l3.4-1.6z" fill="#ffd66b"/>
   <circle cx="9" cy="16" r="2.2" fill="#ffb3c9"/><circle cx="66" cy="30" r="1.8" fill="#a9dcff"/></svg>`;
+
+// ---------- themes ----------
+const THEMES = {
+  langit: { name: "Langit", sky: "#dcefff", sky2: "#c6e3fb", ink: "#1f3b63", ink2: "#5d7697", accent: "#3d8fd9", line: "#d3e5f6", card: "255,255,255", money: "#1f3b63" },
+  sakura: { name: "Sakura", sky: "#ffe6ef", sky2: "#f9c9da", ink: "#5a2a43", ink2: "#94607a", accent: "#e0679a", line: "#f6d3e1", card: "255,255,255", money: "#8a3a63" },
+  mint: { name: "Mint", sky: "#dcf6ec", sky2: "#bfe8d6", ink: "#1f4d3c", ink2: "#5b8a77", accent: "#2b9f74", line: "#cdeee0", card: "255,255,255", money: "#1f5a45" },
+  lavender: { name: "Lavender", sky: "#ece6ff", sky2: "#d7cbfa", ink: "#36295e", ink2: "#6f6396", accent: "#7c5cd6", line: "#e0d8fa", card: "255,255,255", money: "#4a3787" },
+  malam: { name: "Malam", sky: "#1f2750", sky2: "#141a3a", ink: "#eef2ff", ink2: "#b8c2e6", accent: "#ffd66b", line: "#3a4580", card: "38,48,94", money: "#0e1330", accentInk: "#1f2750" },
+};
+function applyTheme(theme) {
+  const th = THEMES[theme?.preset] || THEMES.langit;
+  const r = document.documentElement.style;
+  const vars = { "--sky": th.sky, "--sky-2": th.sky2, "--ink": th.ink, "--ink-2": th.ink2, "--accent": theme?.accent || th.accent, "--line": th.line,
+    "--card-rgb": th.card, "--card-a": String(theme?.cardOpacity ?? 1), "--money": th.money, "--accent-ink": th.accentInk || "#fff" };
+  for (const [k, val] of Object.entries(vars)) r.setProperty(k, val);
+  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", th.sky);
+}
+const resetTheme = () => applyTheme({});
+function useTheme(theme) { useEffect(() => { applyTheme(theme); return resetTheme; }, [JSON.stringify(theme || {})]); }
+
+function ThemeSheet({ theme, onSave, onClose }) {
+  const [x, setX] = useState({ preset: "langit", cardOpacity: 1, ...(theme || {}) });
+  const [busy, run] = useBusy();
+  useEffect(() => { applyTheme(x); }, [JSON.stringify(x)]);
+  const close = () => { applyTheme(theme); onClose(); };
+  return html`<${Sheet} title=${t("theme")} onClose=${close}>
+    <div class="swatches">${Object.entries(THEMES).map(([k, th]) => html`<button type="button" class="swatch" aria-pressed=${x.preset === k} onClick=${() => setX({ ...x, preset: k, accent: null })}>
+      <span style="background:linear-gradient(135deg, ${th.sky} 50%, ${th.accent} 50%)"></span>${th.name}</button>`)}</div>
+    <label class="f">${t("accentColor")}<input type="color" class="in" style="height:48px;padding:4px" value=${x.accent || THEMES[x.preset]?.accent || "#3d8fd9"} onInput=${(e) => setX({ ...x, accent: e.target.value })} /></label>
+    <label class="f">${t("cardOpacity")}: ${Math.round((x.cardOpacity ?? 1) * 100)}%
+      <input type="range" min="0.4" max="1" step="0.05" value=${x.cardOpacity ?? 1} onInput=${(e) => setX({ ...x, cardOpacity: Number(e.target.value) })} /></label>
+    <div class="row"><button class="btn ghost grow" onClick=${close}>${t("cancel")}</button>
+      <button class="btn grow" disabled=${busy} onClick=${() => run(async () => { await onSave(x); onClose(); }, t("saved"))}>${t("save")}</button></div>
+  </${Sheet}>`;
+}
 
 /** Number input without the keyboard: − value + buttons. */
 function Stepper({ value, onChange, step = 1, min = -999, max = 999, label, suffix }) {
@@ -140,37 +176,48 @@ function SavingsHero({ S, child, v }) {
   </section>`;
 }
 
-function ScreenCard({ S, child, v, reload }) {
-  const cfg = v.screen || { enabled: false };
-  const devices = S.categories.filter((c) => c.kind === "screen" && c.active);
-  const open = v.sessions.find((s) => !s.ended_at);
+/** Minutes used in a quota's current window (today, or this cycle week), counting only its devices. */
+function quotaUsage(q, v, child, now) {
+  const weekly = q.mode === "weekly";
+  const from = weekly ? (v.weekStart > child.start_date ? v.weekStart : child.start_date) : v.today;
+  const a0 = E.localMidnight(from, v.tz);
+  const a1 = E.localMidnight(weekly ? E.addDays(v.weekStart, 7) : E.addDays(v.today, 1), v.tz);
+  const mine = q.deviceIds ? v.sessions.filter((x) => q.deviceIds.includes(x.device_id)) : v.sessions;
+  const usedMs = mine.reduce((sum, x) => sum + Math.max(0, Math.min(x.ended_at ? new Date(x.ended_at).getTime() : now, a1) - Math.max(new Date(x.started_at).getTime(), a0)), 0);
+  const limit = weekly ? E.screenWeekLimit(q, v.weekStart) : E.screenLimit(q, v.today);
+  return { weekly, usedMs, used: Math.round(usedMs / 60000), limit, leftMs: limit * 60000 - usedMs };
+}
+
+function ScreenCards({ S, child, v, reload }) {
+  const quotas = E.quotasOf(v.screen);
+  const open = v.sessions.find((x) => !x.ended_at);
   const [now, setNow] = useState(Date.now());
+  useEffect(() => { if (!open) return; const i = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(i); }, [open?.id]);
+  if (!quotas.length) return null;
+  return html`${quotas.map((q) => html`<${QuotaCard} key=${q.id} S=${S} child=${child} v=${v} q=${q} open=${open} now=${now} reload=${reload} single=${quotas.length === 1} />`)}`;
+}
+
+function QuotaCard({ S, child, v, q, open, now, reload, single }) {
   const [dev, setDev] = useState(null);
   const [busy, run] = useBusy();
-  useEffect(() => { if (!open) return; const i = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(i); }, [open?.id]);
-  if (cfg.enabled === false) return null;
-  const weekly = cfg.mode === "weekly";
-  const winFrom = weekly ? (v.weekStart > child.start_date ? v.weekStart : child.start_date) : v.today;
-  const winStart = E.localMidnight(winFrom, v.tz);
-  const winEnd = E.localMidnight(weekly ? E.addDays(v.weekStart, 7) : E.addDays(v.today, 1), v.tz);
-  const usedMs = v.sessions.reduce((sum, s) => sum + Math.max(0, Math.min(s.ended_at ? new Date(s.ended_at).getTime() : now, winEnd) - Math.max(new Date(s.started_at).getTime(), winStart)), 0);
-  const used = Math.round(usedMs / 60000);
-  const limit = weekly ? E.screenWeekLimit(cfg, v.weekStart) : E.screenLimit(cfg, v.today);
-  const leftLabel = weekly ? t("leftWeek") : t("leftToday");
-  const leftMs = limit * 60000 - usedMs;
-  const left = Math.ceil(leftMs / 60000);
-  return html`<section class="panel screen" aria-label=${t("screen")}>
-    <div class="panel-head"><h2>${t("screen")}</h2><span class="muted">${t(weekly ? "usedWeek" : "usedToday", { m: used, l: limit })}</span></div>
-    ${open ? html`
+  const devices = S.categories.filter((c) => c.kind === "screen" && c.active && (!q.deviceIds || q.deviceIds.includes(c.id)));
+  const mineOpen = open && (!q.deviceIds || q.deviceIds.includes(open.device_id));
+  const u = quotaUsage(q, v, child, now);
+  const left = Math.ceil(u.leftMs / 60000);
+  const leftLabel = u.weekly ? t("leftWeek") : t("leftToday");
+  return html`<section class="panel screen" aria-label=${q.name}>
+    <div class="panel-head"><h2>${single ? t("screen") : "🎮 " + q.name}</h2><span class="muted">${t(u.weekly ? "usedWeek" : "usedToday", { m: u.used, l: u.limit })}</span></div>
+    ${mineOpen ? html`
       <p class="muted">${t("running", { what: open.device_label || "" })}</p>
-      <div class="clock num ${leftMs < 0 ? "over" : ""}">${leftMs < 0 ? "−" : ""}${mmss(Math.abs(leftMs))}</div>
-      ${left >= 0 && left <= (cfg.warnMin || 5) ? html`<div class="banner warn">${t("warn5", { m: left })}</div>` : null}
-      ${left < 0 ? html`<div class="banner bad">${t(weekly ? "overWeek" : "overNow", { m: -left })}</div>` : html`<p class="muted">${leftLabel}</p>`}
+      <div class="clock num ${u.leftMs < 0 ? "over" : ""}">${u.leftMs < 0 ? "−" : ""}${mmss(Math.abs(u.leftMs))}</div>
+      ${left >= 0 && left <= (q.warnMin || 5) ? html`<div class="banner warn">${t("warn5", { m: left })}</div>` : null}
+      ${left < 0 ? html`<div class="banner bad">${t(u.weekly ? "overWeek" : "overNow", { m: -left })}</div>` : html`<p class="muted">${leftLabel}</p>`}
       <button class="btn big bad" disabled=${busy} onClick=${() => run(async () => { await A.screenStop(); await reload(); })}>${t("stop")}</button>` : html`
       <div class="clock num ${left < 0 ? "over" : ""}">${left < 0 ? "−" : ""}${Math.abs(left)} <span class="small muted">menit ${leftLabel}</span></div>
-      <p class="muted">${t("whatPlay")}</p>
-      <div class="chips">${devices.map((d) => html`<button type="button" class="chip-btn" aria-pressed=${dev === d.id} onClick=${() => setDev(d.id)}>${d.emoji} ${d.name}</button>`)}</div>
-      <button class="btn big" disabled=${!dev || busy} onClick=${() => run(async () => { await A.screenStart(dev); setDev(null); await reload(); })}>${t("start")}</button>`}
+      ${open ? html`<p class="muted">${t("otherTimer", { what: open.device_label || "" })}</p>` : html`
+      ${devices.length > 1 ? html`<p class="muted">${t("whatPlay")}</p>` : null}
+      <div class="chips">${devices.map((d) => html`<button type="button" class="chip-btn" aria-pressed=${(dev || (devices.length === 1 ? devices[0].id : null)) === d.id} onClick=${() => setDev(d.id)}>${d.emoji} ${d.name}</button>`)}</div>
+      <button class="btn big" disabled=${!(dev || devices.length === 1) || busy} onClick=${() => run(async () => { await A.screenStart(dev || devices[0].id); setDev(null); await reload(); })}>${t("start")}</button>`}`}
   </section>`;
 }
 
@@ -244,18 +291,62 @@ function WeeklyCards({ child, v, reload }) {
   </section>`;
 }
 
+/** Latest recorded Quran position for an activity. */
+function lastQuran(v, act) {
+  return v.entries.filter((x) => x.activity_id === act.id && x.quran && x.status !== "rejected")
+    .sort((a, b) => (a.date === b.date ? (a.created_at < b.created_at ? 1 : -1) : a.date < b.date ? 1 : -1))[0] || null;
+}
+const fmtQuran = (q) => q ? `${Q.surahName(q.surah)} ${q.from === q.to ? "ayat " + q.from : "ayat " + q.from + "–" + q.to}` : "";
+
+function QuranCard({ v }) {
+  const acts = v.acts.filter((a) => a.track_quran && a.active);
+  const rows = acts.map((a) => [a, lastQuran(v, a)]).filter(([, e]) => e);
+  if (!acts.length) return null;
+  return html`<section class="panel quran-card"><h2>${t("lastRead")}</h2>
+    ${rows.length ? html`<div class="list">${rows.map(([a, e]) => { const nx = Q.nextPosition(e.quran);
+      return html`<div class="item"><span class="em">${a.emoji || "📖"}</span><div class="main"><b>${a.name}: ${fmtQuran(e.quran)}</b>
+        <span>${fmtDay(e.date)}${nx ? " · " + t("continueAt", { pos: Q.surahName(nx.surah) + " ayat " + nx.from }) : ""}</span></div></div>`; })}</div>`
+      : html`<p class="muted">${t("noQuranYet")}</p>`}
+  </section>`;
+}
+
+function QuranPicker({ v, act, value, onChange }) {
+  const [q, setQ] = useState("");
+  const last = lastQuran(v, act);
+  const next = Q.nextPosition(last?.quran);
+  const recent = [...new Set(v.entries.filter((x) => x.quran && x.activity_id === act.id).map((x) => x.quran.surah))].slice(0, 6);
+  const pick = (surah, from = 1) => onChange({ surah, from, to: from });
+  if (value?.surah) {
+    const max = Q.ayatCount(value.surah);
+    return html`<div class="quran-pick">
+      <div class="row"><b class="grow">📖 ${Q.surahName(value.surah)} <span class="muted small">(${max} ayat)</span></b>
+        <button type="button" class="btn sm ghost" onClick=${() => onChange(null)}>${t("change")}</button></div>
+      <div class="form"><${Stepper} label=${t("fromAyat")} value=${value.from} min=${1} max=${max} onChange=${(n) => onChange({ ...value, from: n, to: Math.max(n, value.to) })} />
+        <${Stepper} label=${t("toAyat")} value=${value.to} min=${value.from} max=${max} onChange=${(n) => onChange({ ...value, to: n })} /></div></div>`;
+  }
+  const hits = Q.searchSurah(q);
+  return html`<div class="quran-pick"><span class="muted small" style="font-weight:800">${t("whichSurah")}</span>
+    ${next ? html`<button type="button" class="btn" onClick=${() => pick(next.surah, next.from)}>${t("continueBtn", { pos: Q.surahName(next.surah) + " ayat " + next.from })}</button>` : null}
+    ${recent.length ? html`<div class="chips">${recent.map((n) => html`<button type="button" class="chip-btn" onClick=${() => pick(n)}>${Q.surahName(n)}</button>`)}</div>` : null}
+    <input class="in" placeholder=${t("searchSurah")} value=${q} onInput=${(e) => setQ(e.target.value)} />
+    ${q ? html`<div class="chips">${hits.length ? hits.slice(0, 12).map((n) => html`<button type="button" class="chip-btn" onClick=${() => pick(n)}>${n}. ${Q.surahName(n)}</button>`) : html`<span class="muted small">${t("noSurah")}</span>`}</div>`
+      : html`<details><summary class="linkbtn">Juz 30 (An-Naba' – An-Nas)</summary><div class="surah-grid">${Q.JUZ_AMMA.map((n) => html`<button type="button" onClick=${() => pick(n)}><small>${n}</small>${Q.surahName(n)}</button>`)}</div></details>`}
+  </div>`;
+}
+
 function LogSheet({ act, child, v, onClose, reload, parentUid }) {
   const step = act.allow_half ? 0.5 : 1;
   const [qty, setQty] = useState(1);
   const [day, setDay] = useState(0);
   const [note, setNote] = useState("");
+  const [quran, setQuran] = useState(null);
   const [busy, run] = useBusy();
   const needsQty = act.kind === "weekly" || !!act.unit;
   const pts = E.entryPoints(act, { qty: needsQty ? qty : 1 });
   const send = () => run(async () => {
     const date = E.addDays(v.today, -day);
-    if (parentUid) await A.parentLog(parentUid, child.id, act, { date, qty: needsQty ? qty : null, note });
-    else await A.logEntry(child.id, act, { date, qty: needsQty ? qty : null, note });
+    if (parentUid) await A.parentLog(parentUid, child.id, act, { date, qty: needsQty ? qty : null, note, quran });
+    else await A.logEntry(child.id, act, { date, qty: needsQty ? qty : null, note, quran });
     showToast(parentUid ? t("saved") : pts < 0 ? t("sentHonest") : t("sentWait"));
     onClose(); await reload();
   });
@@ -264,6 +355,7 @@ function LogSheet({ act, child, v, onClose, reload, parentUid }) {
       <div class="stepper"><button type="button" aria-label="Kurangi" onClick=${() => setQty(Math.max(step, qty - step))}>−</button><span class="v num">${fmtQty(qty)}</span><button type="button" aria-label="Tambah" onClick=${() => setQty(qty + step)}>+</button></div></div>` : null}
     ${act.kind !== "weekly" ? html`<p class="amt ${amtClass(pts)}">${signed(pts) || "0"} poin</p>` : null}
     <div class="seg"><button type="button" aria-pressed=${day === 0} onClick=${() => setDay(0)}>${t("today")}</button><button type="button" aria-pressed=${day === 1} onClick=${() => setDay(1)}>${t("yesterday")}</button></div>
+    ${act.track_quran ? html`<${QuranPicker} v=${v} act=${act} value=${quran} onChange=${setQuran} />` : null}
     <label class="f">${t("note")}<input class="in" id="log-note" maxlength="80" value=${note} onInput=${(e) => setNote(e.target.value)} /></label>
     <div class="row"><button class="btn ghost grow" onClick=${onClose}>${t("cancel")}</button><button class="btn grow" disabled=${busy} onClick=${send}>${t("send")}</button></div>
   </${Sheet}>`;
@@ -407,14 +499,19 @@ function ChildHome({ S, reload }) {
   const child = S.children.find((c) => c.id === S.me.child_id);
   if (!child) return html`<div class="wrap"><div class="empty">${t("noFamily")}</div></div>`;
   useBackground(S, child);
+  useTheme(child.theme);
+  const [themeOpen, setThemeOpen] = useState(false);
   const v = childView(S, child);
   return html`<div class="wrap">
     <header class="top"><${Mascot} /><h1>${t("hello", { name: child.name })}<small>${fmtDay(v.today, true)}</small></h1>
+      <button class="icon-btn" aria-label=${t("theme")} onClick=${() => setThemeOpen(true)}>🎨</button>
       <button class="linkbtn" onClick=${() => A.signOut()}>${t("signOut")}</button></header>
+    ${themeOpen && html`<${ThemeSheet} theme=${child.theme} onSave=${async (th) => { await A.setMyTheme(th); await reload(); }} onClose=${() => setThemeOpen(false)} />`}
     <${Slideshow} S=${S} child=${child} />
+    <${QuranCard} v=${v} />
     <${SavingsHero} S=${S} child=${child} v=${v} />
     <${PrayerStrip} S=${S} child=${child} v=${v} reload=${reload} />
-    <${ScreenCard} S=${S} child=${child} v=${v} reload=${reload} />
+    <${ScreenCards} S=${S} child=${child} v=${v} reload=${reload} />
     <${WeeklyCards} child=${child} v=${v} reload=${reload} />
     <${ActivityTiles} S=${S} child=${child} v=${v} reload=${reload} />
     <${ProposeForm} S=${S} child=${child} v=${v} reload=${reload} />
@@ -429,6 +526,7 @@ function ChildHome({ S, reload }) {
 // =====================================================================
 // Parent home
 function ParentHome({ S, reload }) {
+  useEffect(() => { resetTheme(); }, []);
   const [childId, setChildId] = useState(S.children[0]?.id || null);
   const [tab, setTab] = useState("check");
   const child = S.children.find((c) => c.id === childId) || S.children[0];
@@ -731,44 +829,60 @@ function CategoryEditor({ S, kind, title, reload }) {
 }
 
 // ---------- screen settings ----------
+/** Editable screen settings with an explicit quota list (the old single setting becomes quota "main"). */
+function withQuotas(screen) {
+  const c = { enabled: true, overBlockMin: 15, overPenalty: -1, leftoverBlockMin: 30, leftoverPointsPerBlock: 1, warnMin: 5, ...(screen || {}) };
+  if (!Array.isArray(c.quotas) || !c.quotas.length) {
+    c.quotas = [{ id: "main", name: "Screentime", mode: c.mode || "daily", weekdayLimitMin: c.weekdayLimitMin ?? 60, weekendLimitMin: c.weekendLimitMin ?? 120, weeklyLimitMin: c.weeklyLimitMin ?? 300, deviceIds: [] }];
+  }
+  delete c.mode; delete c.weeklyLimitMin;
+  return c;
+}
+
 function ScreenTab({ S, child, v, reload }) {
-  const [c, setC] = useState({ ...child.screen });
+  const [c, setC] = useState(withQuotas(child.screen));
   const [busy, run] = useBusy();
   const num = (k) => (n) => setC({ ...c, [k]: n });
-  const scr = v.screen || { ...c, adjust: {} };
-  const mins = E.screenMinutesByDay(v.sessions, v.tz);
+  const setQ = (i, patch) => setC({ ...c, quotas: c.quotas.map((q, j) => (j === i ? { ...q, ...patch } : q)) });
+  const devices = S.categories.filter((k) => k.kind === "screen" && k.active);
+  const live = E.quotasOf(v.screen || {});
+  const mins = (q) => E.screenMinutesByDay(q.deviceIds ? v.sessions.filter((x) => q.deviceIds.includes(x.device_id)) : v.sessions, v.tz);
   const ws = v.weekStart;
-  const byDevice = {};
-  for (const s of v.sessions.filter((s) => E.localDate(s.started_at, v.tz) >= ws)) {
-    const m = Math.round(((s.ended_at ? new Date(s.ended_at) : new Date()) - new Date(s.started_at)) / 60000);
-    byDevice[s.device_label || "?"] = (byDevice[s.device_label || "?"] || 0) + m;
-  }
-  const adjOf = (d) => (S.adjust.find((a) => a.child_id === child.id && a.date === d) || {}).minutes || 0;
+  const adjOf = (qid, d) => (S.adjust.find((a) => a.child_id === child.id && a.date === d && (a.quota_id || "main") === qid) || {}).minutes || 0;
+  const setAdj = (qid, d, m) => run(async () => { await A.setScreenAdjust(child.id, d, m, qid); await reload(); });
   const tomorrow = E.addDays(v.today, 1);
-  const setAdj = (d, m) => run(async () => { await A.setScreenAdjust(child.id, d, m); await reload(); });
+  const unassigned = devices.filter((d) => !c.quotas.some((q) => (q.deviceIds || []).includes(d.id)));
   return html`
-    <section class="panel"><h2>${t("screenAdjust")}</h2><p class="muted small">${t("screenAdjustHint")}${c.mode === "weekly" ? " Pada mode per minggu, tambahan ini masuk ke jatah minggu tersebut." : ""}</p>
-      ${c.mode === "weekly" ? html`<div class="week"><div class="row wrap-row"><div class="grow"><b>Minggu ini</b><div class="muted small">Jatah ${E.screenWeekLimit(scr, ws)} menit${adjOf(v.today) ? ` (tambahan hari ini ${adjOf(v.today) > 0 ? "+" : ""}${adjOf(v.today)})` : ""}</div></div>
-          <${Stepper} value=${adjOf(v.today)} step=${15} min=${-(c.weeklyLimitMin || 0)} max=${600} suffix="mnt" onChange=${(n) => setAdj(v.today, n)} /></div></div>` : null}
-      ${(c.mode === "weekly" ? [] : [[v.today, t("today")], [tomorrow, "Besok"]]).map(([d, label]) => { const base = E.screenLimit({ ...c, adjust: {} }, d); const adj = adjOf(d);
-        return html`<div class="week"><div class="row wrap-row"><div class="grow"><b>${label} · ${fmtDay(d)}</b><div class="muted small">Jatah ${base + adj} menit ${adj ? `(${adj > 0 ? "+" : ""}${adj})` : ""}</div></div>
-          <${Stepper} value=${adj} step=${15} min=${-base} max=${240} suffix="mnt" onChange=${(n) => setAdj(d, n)} /></div></div>`; })}
-    </section>
-    <section class="panel"><div class="panel-head"><h2>Minggu ini</h2>${scr.mode === "weekly" ? html`<span class="muted">${(() => { let u = 0; for (let i = 0; i < 7; i++) { const d = E.addDays(ws, i); if (d >= child.start_date) u += mins[d] || 0; } return `${u} / ${E.screenWeekLimit(scr, ws)} menit`; })()}</span>` : null}</div>
-      <div class="list">${[0, 1, 2, 3, 4, 5, 6].map((i) => { const d = E.addDays(ws, i); if (d > v.today || d < child.start_date) return null; const used = mins[d] || 0; const lim = scr.mode === "weekly" ? E.screenWeekLimit(scr, ws) : E.screenLimit(scr, d);
-        return html`<div class="item"><div class="main"><b>${fmtDay(d)}</b><div class="meter ${used <= lim ? "full" : ""}" style="margin-top:6px"><div style="width:${Math.min(100, lim ? (used / lim) * 100 : 100)}%"></div></div></div><span class="amt ${used > lim ? "neg" : "zero"}">${used}/${lim} mnt</span></div>`; })}</div>
-      ${Object.keys(byDevice).length ? html`<p class="muted">${Object.entries(byDevice).map(([k, m]) => `${k}: ${m} mnt`).join(" · ")}</p>` : null}
-    </section>
+    ${live.map((q) => { const m = mins(q); const weekly = q.mode === "weekly";
+      let wUsed = 0; for (let i = 0; i < 7; i++) { const d = E.addDays(ws, i); if (d >= child.start_date) wUsed += m[d] || 0; }
+      return html`<section class="panel"><div class="panel-head"><h2>${q.name}</h2><span class="tag info">${weekly ? "per minggu" : "per hari"}</span></div>
+        ${weekly ? html`<div class="week"><div class="row wrap-row"><div class="grow"><b>Minggu ini: ${wUsed} / ${E.screenWeekLimit(q, ws)} menit</b>
+            <div class="meter ${wUsed <= E.screenWeekLimit(q, ws) ? "full" : ""}" style="margin-top:6px"><div style="width:${Math.min(100, (wUsed / Math.max(1, E.screenWeekLimit(q, ws))) * 100)}%"></div></div></div>
+          <${Stepper} label=${t("screenAdjust")} value=${adjOf(q.id, v.today)} step=${15} min=${-(q.weeklyLimitMin || 0)} max=${600} suffix="mnt" onChange=${(n) => setAdj(q.id, v.today, n)} /></div></div>`
+        : html`${[[v.today, t("today")], [tomorrow, "Besok"]].map(([d, label]) => html`<div class="week"><div class="row wrap-row"><div class="grow"><b>${label} · ${fmtDay(d)}</b>
+            <div class="muted small">${d === v.today ? `terpakai ${m[d] || 0} dari ` : "jatah "}${E.screenLimit(q, d)} menit</div></div>
+          <${Stepper} label=${t("screenAdjust")} value=${adjOf(q.id, d)} step=${15} min=${-200} max=${240} suffix="mnt" onChange=${(n) => setAdj(q.id, d, n)} /></div></div>`)}`}
+      </section>`; })}
     <section class="panel"><h2>Aturan screentime</h2>
       <label class="check"><input type="checkbox" checked=${c.enabled !== false} onChange=${(e) => setC({ ...c, enabled: e.target.checked })} /> Screentime aktif</label>
-      <div class="f"><span class="muted small" style="font-weight:800">Jatah dihitung</span>
-        <div class="seg"><button type="button" aria-pressed=${c.mode !== "weekly"} onClick=${() => setC({ ...c, mode: "daily" })}>Per hari</button>
-          <button type="button" aria-pressed=${c.mode === "weekly"} onClick=${() => setC({ ...c, mode: "weekly", weeklyLimitMin: c.weeklyLimitMin ?? 300 })}>Per minggu</button></div>
-        <p class="muted small">${c.mode === "weekly" ? `Satu jatah untuk seminggu (${WEEKDAYS[E.weekday(child.period_anchor) - 1]}–${WEEKDAYS[(E.weekday(child.period_anchor) + 5) % 7]}, ikut siklus gajian). Terisi ulang tiap awal minggu.` : "Jatah terisi ulang setiap hari."}</p></div>
+      ${c.quotas.map((q, i) => html`<div class="rule">
+        <div class="row wrap-row"><input class="in grow" aria-label="Nama jatah" value=${q.name} onInput=${(e) => setQ(i, { name: e.target.value })} />
+          ${c.quotas.length > 1 ? html`<button class="btn sm ghost" onClick=${() => setC({ ...c, quotas: c.quotas.filter((_, j) => j !== i) })}>${t("remove")}</button>` : null}</div>
+        <div class="seg"><button type="button" aria-pressed=${q.mode !== "weekly"} onClick=${() => setQ(i, { mode: "daily" })}>Per hari</button>
+          <button type="button" aria-pressed=${q.mode === "weekly"} onClick=${() => setQ(i, { mode: "weekly", weeklyLimitMin: q.weeklyLimitMin ?? 300 })}>Per minggu</button></div>
+        <p class="muted small">${q.mode === "weekly" ? `Satu jatah untuk seminggu (${WEEKDAYS[E.weekday(child.period_anchor) - 1]}–${WEEKDAYS[(E.weekday(child.period_anchor) + 5) % 7]}, ikut siklus gajian).` : "Jatah terisi ulang setiap hari."}</p>
+        <div class="form">${q.mode === "weekly" ? html`<${Stepper} label="Jatah per minggu" value=${q.weeklyLimitMin ?? 300} step=${15} min=${0} max=${3000} suffix="mnt" onChange=${(n) => setQ(i, { weeklyLimitMin: n })} />`
+          : html`<${Stepper} label="Hari sekolah" value=${q.weekdayLimitMin ?? 60} step=${15} min=${0} max=${600} suffix="mnt" onChange=${(n) => setQ(i, { weekdayLimitMin: n })} />
+            <${Stepper} label="Akhir pekan" value=${q.weekendLimitMin ?? 120} step=${15} min=${0} max=${600} suffix="mnt" onChange=${(n) => setQ(i, { weekendLimitMin: n })} />`}</div>
+        <span class="muted small" style="font-weight:800">Perangkat untuk jatah ini</span>
+        <div class="chips">${devices.map((d) => { const on = (q.deviceIds || []).includes(d.id);
+          return html`<button type="button" class="chip-btn" aria-pressed=${on} onClick=${() => setC({ ...c, quotas: c.quotas.map((x, j) => ({ ...x, deviceIds: j === i ? (on ? (x.deviceIds || []).filter((y) => y !== d.id) : [...(x.deviceIds || []), d.id]) : (x.deviceIds || []).filter((y) => y !== d.id || on) })) })}>${d.emoji} ${d.name}</button>`; })}</div>
+        ${!(q.deviceIds || []).length ? html`<p class="muted small">Belum memilih perangkat: semua perangkat dihitung ke jatah ini.</p>` : null}
+      </div>`)}
+      <button class="btn sm ghost" style="align-self:flex-start" onClick=${() => setC({ ...c, quotas: [...c.quotas, { id: "q" + Date.now().toString(36), name: "Jatah baru", mode: "daily", weekdayLimitMin: 30, weekendLimitMin: 60, weeklyLimitMin: 120, deviceIds: [] }] })}>+ Tambah jatah</button>
+      ${c.quotas.length > 1 && unassigned.length ? html`<p class="muted small">Tidak dihitung ke jatah mana pun: ${unassigned.map((d) => d.name).join(", ")}.</p>` : null}
+      <h3>Penalti dan hadiah (semua jatah)</h3>
       <div class="form">
-        ${c.mode === "weekly" ? html`<${Stepper} label="Jatah per minggu" value=${c.weeklyLimitMin ?? 300} step=${15} min=${0} max=${3000} suffix="mnt" onChange=${num("weeklyLimitMin")} />` : html`
-        <${Stepper} label="Jatah hari sekolah" value=${c.weekdayLimitMin} step=${15} min=${0} max=${600} suffix="mnt" onChange=${num("weekdayLimitMin")} />
-        <${Stepper} label="Jatah akhir pekan" value=${c.weekendLimitMin} step=${15} min=${0} max=${600} suffix="mnt" onChange=${num("weekendLimitMin")} />`}
         <${Stepper} label="Penalti tiap kelebihan" value=${c.overBlockMin} step=${5} min=${5} max=${120} suffix="mnt" onChange=${num("overBlockMin")} />
         <${Stepper} label="Poin penalti per blok" value=${c.overPenalty} max=${0} onChange=${num("overPenalty")} />
         <${Stepper} label="Hadiah tiap sisa" value=${c.leftoverBlockMin} step=${5} min=${5} max=${240} suffix="mnt" onChange=${num("leftoverBlockMin")} />
@@ -777,10 +891,18 @@ function ScreenTab({ S, child, v, reload }) {
       </div>
       <button class="btn" disabled=${busy} onClick=${() => run(async () => { await A.updateChild(child.id, { screen: c }); await reload(); }, t("saved"))}>${t("save")}</button></section>
     <${CategoryEditor} S=${S} kind="screen" title="Pilihan perangkat / kegiatan layar" reload=${reload} />
-    <section class="panel"><h2>Sesi terakhir</h2>${v.sessions.slice(0, 10).map((s) => html`<${SessionRow} key=${s.id + (s.ended_at || "")} s=${s} v=${v} reload=${reload} />`)}</section>`;
+    <section class="panel"><h2>Sesi terakhir</h2>${v.sessions.slice(0, 10).map((x) => html`<${SessionRow} key=${x.id + (x.ended_at || "")} s=${x} v=${v} reload=${reload} />`)}</section>`;
 }
 
 // ---------- family ----------
+function ParentThemeButton({ child, reload }) {
+  const [open, setOpen] = useState(false);
+  const th = THEMES[child.theme?.preset] || THEMES.langit;
+  return html`<div class="row wrap-row"><span class="muted small">Tema ${child.name}: <b>${th.name}</b>, kartu ${Math.round((child.theme?.cardOpacity ?? 1) * 100)}%</span>
+    <button class="btn sm" onClick=${() => setOpen(true)}>🎨 Atur tema</button>
+    ${open && html`<${ThemeSheet} theme=${child.theme} onSave=${async (x) => { await A.updateChild(child.id, { theme: x }); await reload(); }} onClose=${() => { resetTheme(); setOpen(false); }} />`}</div>`;
+}
+
 function BackgroundPicker({ S, child, reload }) {
   const [busy, run] = useBusy();
   const url = child.background_path ? S.urls[child.background_path] : null;
@@ -835,8 +957,9 @@ function FamilyTab({ S, child, reload }) {
         ${al.freq === "monthly" ? html`<p class="muted small">Dibayar tiap tanggal 1.</p>`
           : html`<label class="f">Hari<select class="in" value=${al.weekday || 1} onChange=${(e) => setAl({ ...al, weekday: Number(e.target.value) })}>${WEEKDAYS.map((d, i) => html`<option value=${i + 1}>${d}</option>`)}</select></label>`}`}</div>
       <button class="btn sm" style="align-self:flex-start" disabled=${busy} onClick=${() => run(async () => { const a = { enabled: !!al.enabled, mode: al.mode || "schedule", cents: parseEur(al.amount) || 0, freq: al.freq || "weekly", everyWeeks: al.everyWeeks || 1, weekday: al.weekday || 1, monthday: 1, start_date: al.start_date || E.localDate(new Date(), S.family.timezone) }; await A.updateChild(child.id, { allowance: a }); await reload(); }, t("saved"))}>${t("save")}</button>
-      <h3>Gambar latar</h3>
+      <h3>Gambar latar dan tema</h3>
       <${BackgroundPicker} S=${S} child=${child} reload=${reload} />
+      <${ParentThemeButton} child=${child} reload=${reload} />
       <h3>Hari libur sholat</h3>
       <label class="check"><input type="checkbox" checked=${child.excused_enabled} onChange=${(e) => run(async () => { await A.updateChild(child.id, { excused_enabled: e.target.checked }); await reload(); })} /> Aktifkan fitur libur (tidak ada −1 otomatis pada hari libur)</label>
       ${child.excused_enabled ? html`<div class="row wrap-row"><input class="in" type="date" style="width:180px" value=${exDay} onInput=${(e) => setExDay(e.target.value)} />
@@ -912,6 +1035,7 @@ function App() {
     : html`<div class="wrap"><div class="banner warn">${t("noFamily")}</div><button class="btn" onClick=${() => A.signOut()}>${t("signOut")}</button></div>`;
   else if (S.me.role === "child") body = html`<${ChildHome} S=${S} reload=${reload} />`;
   else body = html`<${ParentHome} S=${S} reload=${reload} />`;
+  useEffect(() => { if (session === null || S || err) window.kqReady?.(); }, [session, S, err]);
   return html`${body}<${Toast} />`;
 }
 
