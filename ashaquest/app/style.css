@@ -217,7 +217,10 @@ body.has-bg .top h1, body.has-bg .top h1 small { text-shadow: 0 1px 6px rgba(255
 @media (max-width: 520px) { .slide { aspect-ratio: 4 / 3; } .slideshow .nav { display: none; } }
 
 /* ---- round 3 ---- */
-.icon-btn { border: none; background: rgba(var(--card-rgb), .7); border-radius: 12px; width: 40px; height: 40px; font-size: 20px; }
+.icon-btn { flex: none; -webkit-appearance: none; appearance: none; border: none; padding: 0; margin: 0; background: rgba(var(--card-rgb), .7); color: var(--ink); border-radius: 12px; width: 40px; height: 40px; min-width: 40px; display: inline-flex; align-items: center; justify-content: center; line-height: 1; box-sizing: border-box; }
+.icon-btn svg { display: block; }
+.with-icon { display: inline-flex; align-items: center; gap: 6px; }
+.with-icon svg { width: 16px; height: 16px; }
 .swatches { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 8px; }
 .swatch { border: 2px solid var(--line); background: rgb(var(--card-rgb)); border-radius: 14px; padding: 8px; display: flex; flex-direction: column; align-items: center; gap: 6px; font-weight: 800; color: var(--ink); }
 .swatch span { width: 44px; height: 44px; border-radius: 50%; display: block; }

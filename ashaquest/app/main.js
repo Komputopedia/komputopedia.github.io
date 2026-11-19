@@ -2,13 +2,13 @@
 import { h, render } from "https://esm.sh/preact@10.24.3";
 import { useState, useEffect, useMemo, useCallback, useRef } from "https://esm.sh/preact@10.24.3/hooks";
 import htm from "https://esm.sh/htm@3.1.1";
-import * as E from "./engine.js?v=202611192136";
-import * as A from "./api.js?v=202611192136";
-import * as Q from "./quran.js?v=202611192136";
-import { t, locale } from "./i18n.js?v=202611192136";
+import * as E from "./engine.js?v=202611192140";
+import * as A from "./api.js?v=202611192140";
+import * as Q from "./quran.js?v=202611192140";
+import { t, locale } from "./i18n.js?v=202611192140";
 
 const html = htm.bind(h);
-const APP_BUILD = "202611192136"; // set by bump-version.sh
+const APP_BUILD = "202611192140"; // set by bump-version.sh
 const VersionTag = () => html`<p class="muted small" style="text-align:center;opacity:.7">Asha Quest v0.2 · build ${APP_BUILD}</p>`;
 
 // ---------- formatting ----------
@@ -502,6 +502,12 @@ function useBackground(S, child) {
   }, [url]);
 }
 
+/** Monochrome palette icon (follows text colour). */
+const PaletteIcon = () => html`<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+  <path d="M12 3a9 9 0 1 0 0 18c1.1 0 1.7-.8 1.7-1.6 0-.5-.2-.9-.5-1.2-.3-.3-.5-.7-.5-1.2 0-.9.8-1.6 1.7-1.6H16a5 5 0 0 0 5-5c0-4.1-4-7.4-9-7.4z"/>
+  <circle cx="7.5" cy="11" r="1.1" fill="currentColor" stroke="none"/><circle cx="10" cy="7.3" r="1.1" fill="currentColor" stroke="none"/>
+  <circle cx="14.5" cy="7.3" r="1.1" fill="currentColor" stroke="none"/><circle cx="17" cy="11" r="1.1" fill="currentColor" stroke="none"/></svg>`;
+
 function ChildHome({ S, reload }) {
   const child = S.children.find((c) => c.id === S.me.child_id);
   if (!child) return html`<div class="wrap"><div class="empty">${t("noFamily")}</div></div>`;
@@ -511,7 +517,7 @@ function ChildHome({ S, reload }) {
   const v = childView(S, child);
   return html`<div class="wrap">
     <header class="top"><${Mascot} /><h1>${t("hello", { name: child.name })}<small>${fmtDay(v.today, true)}</small></h1>
-      <button class="icon-btn" aria-label=${t("theme")} onClick=${() => setThemeOpen(true)}>🎨</button>
+      <button class="icon-btn" aria-label=${t("theme")} onClick=${() => setThemeOpen(true)}><${PaletteIcon} /></button>
       <button class="linkbtn" onClick=${() => A.signOut()}>${t("signOut")}</button></header>
     ${themeOpen && html`<${ThemeSheet} theme=${child.theme} onSave=${async (th) => { await A.setMyTheme(th); await reload(); }} onClose=${() => setThemeOpen(false)} />`}
     <${Slideshow} S=${S} child=${child} />
@@ -906,7 +912,7 @@ function ParentThemeButton({ child, reload }) {
   const [open, setOpen] = useState(false);
   const th = THEMES[child.theme?.preset] || THEMES.langit;
   return html`<div class="row wrap-row"><span class="muted small">Tema ${child.name}: <b>${th.name}</b>, kartu ${Math.round((child.theme?.cardOpacity ?? 1) * 100)}%</span>
-    <button class="btn sm" onClick=${() => setOpen(true)}>🎨 Atur tema</button>
+    <button class="btn sm with-icon" onClick=${() => setOpen(true)}><${PaletteIcon} /> Atur tema</button>
     ${open && html`<${ThemeSheet} theme=${child.theme} onSave=${async (x) => { await A.updateChild(child.id, { theme: x }); await reload(); }} onClose=${() => { resetTheme(); setOpen(false); }} />`}</div>`;
 }
 
