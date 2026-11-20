@@ -254,3 +254,6 @@ input[type="range"] { accent-color: var(--accent); width: 100%; }
 @keyframes kqLoadBob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
 @keyframes kqLoadDot { 0%, 100% { opacity: .35; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-5px); } }
 @media (prefers-reduced-motion: reduce) { .loader-rainbow path { animation: none; stroke-dashoffset: 0; } .loader-cloud, .loader-dots i { animation: none; } }
+
+.pager { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 10px; }
+.pager .btn:disabled { opacity: .35; }

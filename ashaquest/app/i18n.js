@@ -1,7 +1,7 @@
 // Interface text. v1 ships Indonesian; add `en` and `nl` objects with the same keys later.
 const id = {
   app: "Asha Quest",
-  loading: "Memuat…",
+  loading: "Memuat…", newer: "‹ Lebih baru", older: "Lebih lama ›", pageOf: "Hal {p} dari {n}",
   loadFail: "Data belum bisa dimuat. Periksa internet, lalu coba lagi.",
   retry: "Coba lagi",
   // login

@@ -2,13 +2,13 @@
 import { h, render } from "https://esm.sh/preact@10.24.3";
 import { useState, useEffect, useMemo, useCallback, useRef } from "https://esm.sh/preact@10.24.3/hooks";
 import htm from "https://esm.sh/htm@3.1.1";
-import * as E from "./engine.js?v=202611192232";
-import * as A from "./api.js?v=202611192232";
-import * as Q from "./quran.js?v=202611192232";
-import { t, locale } from "./i18n.js?v=202611192232";
+import * as E from "./engine.js?v=202611200626";
+import * as A from "./api.js?v=202611200626";
+import * as Q from "./quran.js?v=202611200626";
+import { t, locale } from "./i18n.js?v=202611200626";
 
 const html = htm.bind(h);
-const APP_BUILD = "202611192232"; // set by bump-version.sh
+const APP_BUILD = "202611200626"; // set by bump-version.sh
 const VersionTag = () => html`<p class="muted small" style="text-align:center;opacity:.7">Asha Quest v0.2 · build ${APP_BUILD}</p>`;
 
 // ---------- formatting ----------
@@ -425,17 +425,33 @@ function SpendForm({ S, child, v, reload }) {
     </form></section>`;
 }
 
-function History({ v, canDeletePending, reload, limit = 25 }) {
+const PAGE_SIZE = 15;
+/** Client-side paging: returns the rows for the current page and a pager bar (null when one page is enough). */
+function usePage(rows, resetKey) {
+  const [state, setState] = useState({ page: 0, key: resetKey });
+  const page = state.key === resetKey ? state.page : 0; // back to page 1 when the filter changes
+  const setPage = (n) => setState({ page: n, key: resetKey });
+  const pages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+  const p = Math.min(page, pages - 1);
+  const bar = pages > 1 ? html`<div class="pager">
+    <button class="btn ghost sm" disabled=${p === 0} onClick=${() => setPage(p - 1)}>${t("newer")}</button>
+    <span class="muted small num">${t("pageOf", { p: p + 1, n: pages })}</span>
+    <button class="btn ghost sm" disabled=${p >= pages - 1} onClick=${() => setPage(p + 1)}>${t("older")}</button></div>` : null;
+  return [rows.slice(p * PAGE_SIZE, (p + 1) * PAGE_SIZE), bar];
+}
+
+function History({ v, canDeletePending, reload }) {
   const [busy, run] = useBusy();
   const rows = [
     ...v.entries.map((x) => ({ k: "e" + x.id, at: x.created_at, date: x.date, em: x.emoji || "⭐", title: x.title, sub: x.note, amt: signed(x.points) || "0", n: x.points, status: x.status, auto: !!x.auto_key, del: canDeletePending && x.status === "pending" ? () => A.deleteEntry(x.id) : null })),
     ...v.money.map((x) => ({ k: "m" + x.id, at: x.created_at, date: x.date, em: x.cents > 0 ? "💶" : "🛍️", title: x.note, amt: (x.cents < 0 ? "−" : "+") + eur(Math.abs(x.cents)), n: x.cents, status: x.status, del: canDeletePending && x.status === "pending" ? () => A.deleteTx(x.id) : null })),
-  ].sort((a, b) => (b.at > a.at ? 1 : -1)).slice(0, limit);
+  ].sort((a, b) => (b.at > a.at ? 1 : -1));
+  const [shown, bar] = usePage(rows);
   return html`<section class="panel"><h2>${t("history")}</h2>
-    <div class="list">${rows.length ? rows.map((r) => html`<div class="item" key=${r.k}><span class="em">${r.em}</span>
+    <div class="list">${shown.length ? shown.map((r) => html`<div class="item" key=${r.k}><span class="em">${r.em}</span>
       <div class="main"><b>${r.title}</b><span>${fmtDay(r.date)} ${r.sub ? "· " + r.sub : ""} <${Tag} status=${r.status} auto=${r.auto} /></span></div>
       <span class="amt ${amtClass(r.n)}">${r.amt}</span>
-      ${r.del ? html`<button class="btn sm ghost" disabled=${busy} onClick=${() => run(async () => { await r.del(); await reload(); })}>${t("remove")}</button>` : null}</div>`) : html`<div class="empty">${t("noHistory")}</div>`}</div></section>`;
+      ${r.del ? html`<button class="btn sm ghost" disabled=${busy} onClick=${() => run(async () => { await r.del(); await reload(); })}>${t("remove")}</button>` : null}</div>`) : html`<div class="empty">${t("noHistory")}</div>`}</div>${bar}</section>`;
 }
 
 function KindnessJar({ S, child }) {
@@ -656,14 +672,15 @@ function ParentHistory({ S, v, reload }) {
   const [days, setDays] = useState(7);
   const from = E.addDays(v.today, -days);
   const rows = v.entries.filter((x) => x.date >= from && x.status !== "pending").sort((a, b) => (a.date === b.date ? (b.created_at > a.created_at ? 1 : -1) : b.date > a.date ? 1 : -1));
+  const [shown, bar] = usePage(rows, days);
   return html`<section class="panel"><div class="panel-head"><h2>Catatan ${days} hari terakhir</h2>
     <button class="btn ghost sm" onClick=${() => setDays(days === 7 ? 30 : 7)}>${days === 7 ? "30 hari" : "7 hari"}</button></div>
-    <div class="list">${rows.length ? rows.map((x) => html`<div class="item"><span class="em">${x.emoji || "⭐"}</span>
+    <div class="list">${shown.length ? shown.map((x) => html`<div class="item" key=${x.id}><span class="em">${x.emoji || "⭐"}</span>
       <div class="main"><b>${x.title}${x.outcome_key ? " · " + x.outcome_key : ""}${x.qty ? " · " + fmtQty(x.qty) : ""}</b><span>${fmtDay(x.date)} <${Tag} status=${x.status} auto=${!!x.auto_key} /> ${x.payday_id ? html`<span class="tag info">dibayar</span>` : null}</span></div>
       <span class="amt ${amtClass(x.points)}">${signed(x.points) || "0"}</span>
       ${!x.payday_id && x.status === "approved" ? html`<button class="btn sm ghost" disabled=${busy} onClick=${() => run(async () => { await A.setEntryStatus(S.uid, x.id, x.auto_key ? "waived" : "rejected"); await reload(); })}>Batalkan</button>` : null}
       ${!x.payday_id && (x.status === "waived" || x.status === "rejected") ? html`<button class="btn sm ghost" disabled=${busy} onClick=${() => run(async () => { await A.setEntryStatus(S.uid, x.id, "approved"); await reload(); })}>Pulihkan</button>` : null}
-    </div>`) : html`<div class="empty">${t("noHistory")}</div>`}</div></section>`;
+    </div>`) : html`<div class="empty">${t("noHistory")}</div>`}</div>${bar}</section>`;
 }
 
 function SessionRow({ s, v, reload }) {
