@@ -1,7 +1,10 @@
 // Interface text. v1 ships Indonesian; add `en` and `nl` objects with the same keys later.
 const id = {
   app: "Asha Quest",
-  loading: "Memuat…", newer: "‹ Lebih baru", older: "Lebih lama ›", pageOf: "Hal {p} dari {n}",
+  loading: "Memuat…", allowanceNext: "Uang saku berikutnya: {when} · {amt}", allowanceOff: "Uang saku otomatis sedang mati.",
+  allowanceHow_auto: "Ikut gajian, dibayar otomatis pukul {hour}:00.", allowanceHow_approval: "Ikut gajian, dibayar setelah orang tua menyetujui gajian (mulai {hour}:00).",
+  allowanceHow_manual: "Ikut gajian, dibayar saat orang tua menekan Bayar.", allowanceHow_schedule: "Jadwal sendiri, masuk otomatis dini hari (sekitar 00:07).",
+  allowanceWeeks: "{n} minggu sekaligus", newer: "‹ Lebih baru", older: "Lebih lama ›", pageOf: "Hal {p} dari {n}",
   loadFail: "Data belum bisa dimuat. Periksa internet, lalu coba lagi.",
   retry: "Coba lagi",
   // login

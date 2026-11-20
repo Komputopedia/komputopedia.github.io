@@ -2,13 +2,14 @@
 import { h, render } from "https://esm.sh/preact@10.24.3";
 import { useState, useEffect, useMemo, useCallback, useRef } from "https://esm.sh/preact@10.24.3/hooks";
 import htm from "https://esm.sh/htm@3.1.1";
-import * as E from "./engine.js?v=202611200626";
-import * as A from "./api.js?v=202611200626";
-import * as Q from "./quran.js?v=202611200626";
-import { t, locale } from "./i18n.js?v=202611200626";
+import * as E from "./engine.js?v=202611200712";
+import * as A from "./api.js?v=202611200712";
+import { nextAllowance } from "./allowance.js?v=202611200712";
+import * as Q from "./quran.js?v=202611200712";
+import { t, locale } from "./i18n.js?v=202611200712";
 
 const html = htm.bind(h);
-const APP_BUILD = "202611200626"; // set by bump-version.sh
+const APP_BUILD = "202611200712"; // set by bump-version.sh
 const VersionTag = () => html`<p class="muted small" style="text-align:center;opacity:.7">Asha Quest v0.2 · build ${APP_BUILD}</p>`;
 
 // ---------- formatting ----------
@@ -963,6 +964,24 @@ function ParentRow({ S, m, reload }) {
   </div>`;
 }
 
+/** "Next allowance" line for the parent: when, how much and how it gets paid, from the saved settings. */
+function NextAllowance({ S, child }) {
+  const tz = S.family.timezone;
+  const today = E.localDate(new Date(), tz);
+  const hour = Number(new Intl.DateTimeFormat("en-GB", { timeZone: tz, hour: "2-digit", hourCycle: "h23" }).format(new Date()));
+  const n = nextAllowance(child, {
+    today, hour,
+    paidPeriodEnds: S.paydays.filter((p) => p.child_id === child.id && p.status === "paid").map((p) => p.period_end),
+    paidKeys: S.money.filter((m) => m.child_id === child.id && m.auto_key).map((m) => m.auto_key),
+  });
+  if (!n) return html`<p class="muted small">${t("allowanceOff")}</p>`;
+  const when = n.date === today ? t("today").toLowerCase() : fmtDay(n.date, true);
+  const how = n.mode === "payday" ? t("allowanceHow_" + (n.payMode || "auto"), { hour: String(n.hour).padStart(2, "0") }) : t("allowanceHow_schedule");
+  return html`<div class="next-allow"><span class="em" aria-hidden="true">💶</span><div>
+    <b>${t("allowanceNext", { when, amt: eur(n.cents) })}</b>
+    <div class="muted small">${how}${n.mode === "payday" && n.weeks > 1 ? " · " + t("allowanceWeeks", { n: n.weeks }) : ""}</div></div></div>`;
+}
+
 function FamilyTab({ S, child, reload }) {
   const [busy, run] = useBusy();
   const firstDay = (() => { const td = E.localDate(new Date(), S.family.timezone); return S.family.period_anchor > td ? S.family.period_anchor : td; })();
@@ -978,6 +997,7 @@ function FamilyTab({ S, child, reload }) {
       <div class="row wrap-row"><input class="in" style="width:160px" inputmode="numeric" maxlength="6" placeholder="PIN baru (6 angka)" value=${pin} onInput=${(e) => setPin(e.target.value)} />
         <button class="btn sm" disabled=${busy || !/^\d{6}$/.test(pin)} onClick=${() => run(async () => { await A.accounts({ action: "set_pin", child_id: child.id, pin }); setPin(""); }, t("saved"))}>Ganti PIN</button></div>
       <h3>Uang saku</h3>
+      <${NextAllowance} S=${S} child=${child} />
       <label class="check"><input type="checkbox" checked=${!!al.enabled} onChange=${(e) => setAl({ ...al, enabled: e.target.checked })} /> Uang saku otomatis</label>
       <div class="seg"><button type="button" aria-pressed=${(al.mode || "schedule") === "payday"} onClick=${() => setAl({ ...al, mode: "payday" })}>Ikut gajian</button>
         <button type="button" aria-pressed=${(al.mode || "schedule") === "schedule"} onClick=${() => setAl({ ...al, mode: "schedule" })}>Jadwal sendiri</button></div>

@@ -257,3 +257,5 @@ input[type="range"] { accent-color: var(--accent); width: 100%; }
 
 .pager { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 10px; }
 .pager .btn:disabled { opacity: .35; }
+.next-allow { display: flex; gap: 10px; align-items: flex-start; background: rgba(var(--card-rgb), .6); border: 1px solid rgba(0,0,0,.06); border-radius: 14px; padding: 10px 12px; margin: 4px 0 8px; }
+.next-allow .em { font-size: 22px; line-height: 1.2; }
