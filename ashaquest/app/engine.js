@@ -88,6 +88,27 @@ export function screenWeekLimit(screen, weekStartDay) {
 }
 
 /**
+ * Current window of a weekly quota at instant `nowMs`. With `resetWeekday` (1 = Monday) and `resetMin`
+ * (minutes after midnight) the week resets then; otherwise it follows the payday cycle (`weekAnchor`) at midnight.
+ * Returns the first local day of the window and its start/end instants.
+ */
+export function quotaWindow(q, nowMs, tz, weekAnchor) {
+  const resetMin = q.resetWeekday ? Number(q.resetMin) || 0 : 0;
+  const startOf = (day) => (q.resetWeekday ? addDays(day, -((weekday(day) - q.resetWeekday + 7) % 7)) : weekAnchor ? weekStartFrom(day, weekAnchor) : weekStart(day));
+  const at = (day) => localMidnight(day, tz) + resetMin * 60000;
+  let start = startOf(localDate(nowMs, tz));
+  if (nowMs < at(start)) start = addDays(start, -7);
+  return { start, startMs: at(start), endMs: at(addDays(start, 7)) };
+}
+
+/** Milliseconds used inside a window on the quota's devices, not counting time before the quota's start date. */
+export function windowUsedMs(q, w, sessions, tz, nowMs) {
+  const a0 = Math.max(w.startMs, q.start_date ? localMidnight(q.start_date, tz) : -Infinity);
+  const mine = q.deviceIds ? (sessions || []).filter((x) => q.deviceIds.includes(x.device_id)) : sessions || [];
+  return mine.reduce((sum, x) => sum + Math.max(0, Math.min(x.ended_at ? new Date(x.ended_at).getTime() : nowMs, w.endMs) - Math.max(new Date(x.started_at).getTime(), a0)), 0);
+}
+
+/**
  * Screen quotas of a child. Each quota has its own devices (null = every device), its own mode and limits,
  * and its own per-day adjustments; penalty and reward settings are shared. The old single setting becomes
  * one quota with id "main".
@@ -111,7 +132,8 @@ export function countToday(entries, activityId, day) { return entries.filter((x)
  * Closed means strictly before `today`. `fromDate` bounds how far back to look
  * (callers pass the day after the last paid period, so paid periods are never touched).
  */
-export function deriveAutoEntries({ today, fromDate, activities = [], entries = [], excused = [], sessions = [], screen = null, tz = "Europe/Amsterdam", weekAnchor = null }) {
+export function deriveAutoEntries({ today, fromDate, activities = [], entries = [], excused = [], sessions = [], screen = null, tz = "Europe/Amsterdam", weekAnchor = null, now = null }) {
+  const nowMs = now ?? localMidnight(today, tz); // closed = ended before this instant
   const wk = (d) => (weekAnchor ? weekStartFrom(d, weekAnchor) : weekStart(d));
   const lastClosed = addDays(today, -1);
   const have = new Set(entries.filter((x) => x.auto_key).map((x) => x.auto_key));
@@ -156,6 +178,19 @@ export function deriveAutoEntries({ today, fromDate, activities = [], entries = 
     for (let d = start; !weekly && d <= lastClosed; d = addDays(d, 1)) {
       const over = (mins[d] || 0) - screenLimit(q, d);
       if (over > 0) push({ auto_key: "st-over:" + sfx + d, date: d, points: Math.ceil(over / q.overBlockMin) * q.overPenalty, title: label("Screentime lebih"), emoji: "⏰", kind: "screen" });
+    }
+    if (weekly) {
+      // Weekly windows: closed once their reset instant has passed. Minutes count from the quota's own start,
+      // so a week that crosses an already-paid payday still sees what was used before it.
+      for (let win = quotaWindow(q, localMidnight(start, tz) + 43200000, tz, weekAnchor); win.endMs <= nowMs; win = quotaWindow(q, win.endMs + 60000, tz, weekAnchor)) {
+        const w = win.start;
+        const used = Math.round(windowUsedMs(q, win, sessions, tz, nowMs) / 60000);
+        const lim = screenWeekLimit(q, w);
+        if (used > lim) push({ auto_key: "st-over-w:" + sfx + w, date: addDays(w, 6), qty: used - lim, points: Math.ceil((used - lim) / q.overBlockMin) * q.overPenalty, title: label("Screentime lebih"), emoji: "⏰", kind: "screen" });
+        const pts = Math.floor(Math.max(0, lim - used) / q.leftoverBlockMin) * q.leftoverPointsPerBlock;
+        if (pts > 0) push({ auto_key: "st-left:" + sfx + w, date: addDays(w, 6), qty: Math.max(0, lim - used), points: pts, title: label("Hemat screentime"), emoji: "🌤️", kind: "screen" });
+      }
+      continue;
     }
     for (let w = wk(start); addDays(w, 6) <= lastClosed; w = addDays(w, 7)) {
       let left = 0;

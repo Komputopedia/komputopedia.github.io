@@ -304,3 +304,50 @@ test("quotasOf turns the old single setting into one quota covering all devices"
   assert.equal(q[0].deviceIds, null);
   assert.equal(E.screenWeekLimit(q[0], "2026-11-13"), 70);
 });
+
+// ---- custom weekly reset (day and time) ----
+const monReset = { ...weeklyScreen, resetWeekday: 1, resetMin: 1, start_date: "2026-11-16" }; // Monday 00:01
+const ms = (iso) => new Date(iso).getTime();
+
+test("custom reset: the window runs Monday 00:01 to the next Monday 00:01", () => {
+  const w = E.quotaWindow(monReset, ms("2026-11-20T20:00:00Z"), "Europe/Amsterdam", "2026-11-13");
+  assert.equal(w.start, "2026-11-16");
+  assert.equal(w.startMs, ms("2026-11-15T23:01:00Z"));
+  assert.equal(w.endMs, ms("2026-11-22T23:01:00Z"));
+  // Monday 00:00:30 is still last week's window
+  assert.equal(E.quotaWindow(monReset, ms("2026-11-22T23:00:30Z"), "Europe/Amsterdam", "2026-11-13").start, "2026-11-16");
+  assert.equal(E.quotaWindow(monReset, ms("2026-11-22T23:02:00Z"), "Europe/Amsterdam", "2026-11-13").start, "2026-11-23");
+});
+
+test("no custom reset: the window follows the payday cycle from midnight", () => {
+  const w = E.quotaWindow(weeklyScreen, ms("2026-11-20T20:00:00Z"), "Europe/Amsterdam", "2026-11-13");
+  assert.equal(w.start, "2026-11-20");
+  assert.equal(w.startMs, ms("2026-11-19T23:00:00Z"));
+});
+
+test("used minutes in a window count only its devices and nothing before the start date", () => {
+  const sessions = [
+    { device_id: "sw", started_at: "2026-11-16T15:54:00Z", ended_at: "2026-11-16T16:08:00Z" }, // 14
+    { device_id: "sw", started_at: "2026-11-19T17:35:00Z", ended_at: "2026-11-19T17:54:00Z" }, // 19
+    { device_id: "ipad", started_at: "2026-11-19T10:00:00Z", ended_at: "2026-11-19T11:00:00Z" },
+  ];
+  const q = { ...monReset, deviceIds: ["sw"] };
+  const w = E.quotaWindow(q, ms("2026-11-20T20:00:00Z"), "Europe/Amsterdam", "2026-11-13");
+  assert.equal(Math.round(E.windowUsedMs(q, w, sessions, "Europe/Amsterdam", ms("2026-11-20T20:00:00Z")) / 60000), 33);
+});
+
+test("custom reset: the week closes at Monday 00:01 and its entry is dated Sunday", () => {
+  const sessions = [{ started_at: "2026-11-16T15:00:00Z", ended_at: "2026-11-16T15:20:00Z" }]; // 20 of 60 -> 40 left
+  const base = { today: "2026-11-23", weekAnchor: "2026-11-13", activities: [], entries: [], sessions, screen: monReset, tz: "Europe/Amsterdam" };
+  assert.equal(E.deriveAutoEntries({ ...base, now: ms("2026-11-22T23:00:30Z") }).length, 0);
+  const after = E.deriveAutoEntries({ ...base, now: ms("2026-11-23T05:00:00Z") });
+  assert.deepEqual(after.map((a) => [a.auto_key, a.points, a.date]), [["st-left:2026-11-16", 1, "2026-11-22"]]);
+});
+
+test("a week that crosses a paid payday still counts the minutes used before it", () => {
+  // paid up to Thu 19 Nov, so fromDate is Fri 20; the Monday week 16-22 used 50 min before Friday
+  const sessions = [{ started_at: "2026-11-16T15:00:00Z", ended_at: "2026-11-16T15:50:00Z" }];
+  const autos = E.deriveAutoEntries({ today: "2026-11-23", fromDate: "2026-11-20", now: ms("2026-11-23T05:00:00Z"), weekAnchor: "2026-11-13",
+    activities: [], entries: [], sessions, screen: monReset, tz: "Europe/Amsterdam" });
+  assert.deepEqual(autos.map((a) => a.auto_key), []); // 10 left: no full 30-minute block, so no reward
+});

@@ -2,14 +2,14 @@
 import { h, render } from "https://esm.sh/preact@10.24.3";
 import { useState, useEffect, useMemo, useCallback, useRef } from "https://esm.sh/preact@10.24.3/hooks";
 import htm from "https://esm.sh/htm@3.1.1";
-import * as E from "./engine.js?v=202611200712";
-import * as A from "./api.js?v=202611200712";
-import { nextAllowance } from "./allowance.js?v=202611200712";
-import * as Q from "./quran.js?v=202611200712";
-import { t, locale } from "./i18n.js?v=202611200712";
+import * as E from "./engine.js?v=202611202038";
+import * as A from "./api.js?v=202611202038";
+import { nextAllowance } from "./allowance.js?v=202611202038";
+import * as Q from "./quran.js?v=202611202038";
+import { t, locale } from "./i18n.js?v=202611202038";
 
 const html = htm.bind(h);
-const APP_BUILD = "202611200712"; // set by bump-version.sh
+const APP_BUILD = "202611202038"; // set by bump-version.sh
 const VersionTag = () => html`<p class="muted small" style="text-align:center;opacity:.7">Asha Quest v0.2 · build ${APP_BUILD}</p>`;
 
 // ---------- formatting ----------
@@ -177,17 +177,24 @@ function SavingsHero({ S, child, v }) {
   </section>`;
 }
 
-/** Minutes used in a quota's current window (today, or this cycle week), counting only its devices. */
+/** Minutes used in a quota's current window (today, or this week up to its reset), counting only its devices. */
 function quotaUsage(q, v, child, now) {
   const weekly = q.mode === "weekly";
-  const from = weekly ? (v.weekStart > child.start_date ? v.weekStart : child.start_date) : v.today;
-  const a0 = E.localMidnight(from, v.tz);
-  const a1 = E.localMidnight(weekly ? E.addDays(v.weekStart, 7) : E.addDays(v.today, 1), v.tz);
+  if (weekly) {
+    const win = E.quotaWindow(q, now, v.tz, child.period_anchor);
+    const usedMs = E.windowUsedMs({ ...q, start_date: child.start_date }, win, v.sessions, v.tz, now);
+    const limit = E.screenWeekLimit(q, win.start);
+    return { weekly, win, usedMs, used: Math.round(usedMs / 60000), limit, leftMs: limit * 60000 - usedMs };
+  }
+  const a0 = E.localMidnight(v.today, v.tz), a1 = E.localMidnight(E.addDays(v.today, 1), v.tz);
   const mine = q.deviceIds ? v.sessions.filter((x) => q.deviceIds.includes(x.device_id)) : v.sessions;
   const usedMs = mine.reduce((sum, x) => sum + Math.max(0, Math.min(x.ended_at ? new Date(x.ended_at).getTime() : now, a1) - Math.max(new Date(x.started_at).getTime(), a0)), 0);
-  const limit = weekly ? E.screenWeekLimit(q, v.weekStart) : E.screenLimit(q, v.today);
+  const limit = E.screenLimit(q, v.today);
   return { weekly, usedMs, used: Math.round(usedMs / 60000), limit, leftMs: limit * 60000 - usedMs };
 }
+/** "Senin 23 Nov, 00:01" for the instant a weekly window ends. */
+const fmtReset = (win, tz) => { const d = new Date(win.endMs);
+  return fmtDay(E.localDate(d, tz)) + ", " + new Intl.DateTimeFormat("en-GB", { timeZone: tz, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(d); };
 
 function ScreenCards({ S, child, v, reload }) {
   const quotas = E.quotasOf(v.screen);
@@ -212,7 +219,7 @@ function QuotaCard({ S, child, v, q, open, now, reload, single }) {
       <p class="muted">${t("running", { what: open.device_label || "" })}</p>
       <div class="clock num ${u.leftMs < 0 ? "over" : ""}">${u.leftMs < 0 ? "−" : ""}${mmss(Math.abs(u.leftMs))}</div>
       ${left >= 0 && left <= (q.warnMin || 5) ? html`<div class="banner warn">${t("warn5", { m: left })}</div>` : null}
-      ${left < 0 ? html`<div class="banner bad">${t(u.weekly ? "overWeek" : "overNow", { m: -left })}</div>` : html`<p class="muted">${leftLabel}</p>`}
+      ${left < 0 ? html`<div class="banner bad">${t(u.weekly ? "overWeek" : "overNow", { m: -left })}</div>` : html`<p class="muted">${leftLabel}${u.weekly ? " · " + t("resetsAt", { when: fmtReset(u.win, v.tz) }) : ""}</p>`}
       <button class="btn big bad" disabled=${busy} onClick=${() => run(async () => { await A.screenStop(); await reload(); })}>${t("stop")}</button>` : html`
       <div class="clock num ${left < 0 ? "over" : ""}">${left < 0 ? "−" : ""}${Math.abs(left)} <span class="small muted">menit ${leftLabel}</span></div>
       ${open ? html`<p class="muted">${t("otherTimer", { what: open.device_label || "" })}</p>` : html`
@@ -885,10 +892,11 @@ function ScreenTab({ S, child, v, reload }) {
   const unassigned = devices.filter((d) => !c.quotas.some((q) => (q.deviceIds || []).includes(d.id)));
   return html`
     ${live.map((q) => { const m = mins(q); const weekly = q.mode === "weekly";
-      let wUsed = 0; for (let i = 0; i < 7; i++) { const d = E.addDays(ws, i); if (d >= child.start_date) wUsed += m[d] || 0; }
+      const u = weekly ? quotaUsage(q, v, child, Date.now()) : null; const wUsed = u?.used || 0; const wLim = u?.limit || 0;
       return html`<section class="panel"><div class="panel-head"><h2>${q.name}</h2><span class="tag info">${weekly ? "per minggu" : "per hari"}</span></div>
-        ${weekly ? html`<div class="week"><div class="row wrap-row"><div class="grow"><b>Minggu ini: ${wUsed} / ${E.screenWeekLimit(q, ws)} menit</b>
-            <div class="meter ${wUsed <= E.screenWeekLimit(q, ws) ? "full" : ""}" style="margin-top:6px"><div style="width:${Math.min(100, (wUsed / Math.max(1, E.screenWeekLimit(q, ws))) * 100)}%"></div></div></div>
+        ${weekly ? html`<div class="week"><div class="row wrap-row"><div class="grow"><b>Minggu ini: ${wUsed} / ${wLim} menit</b>
+            <div class="muted small">${fmtDay(u.win.start)} – reset ${fmtReset(u.win, v.tz)}</div>
+            <div class="meter ${wUsed <= wLim ? "full" : ""}" style="margin-top:6px"><div style="width:${Math.min(100, (wUsed / Math.max(1, wLim)) * 100)}%"></div></div></div>
           <${Stepper} label=${t("screenAdjust")} value=${adjOf(q.id, v.today)} step=${15} min=${-(q.weeklyLimitMin || 0)} max=${600} suffix="mnt" onChange=${(n) => setAdj(q.id, v.today, n)} /></div></div>`
         : html`${[[v.today, t("today")], [tomorrow, "Besok"]].map(([d, label]) => html`<div class="week"><div class="row wrap-row"><div class="grow"><b>${label} · ${fmtDay(d)}</b>
             <div class="muted small">${d === v.today ? `terpakai ${m[d] || 0} dari ` : "jatah "}${E.screenLimit(q, d)} menit</div></div>
@@ -901,7 +909,14 @@ function ScreenTab({ S, child, v, reload }) {
           ${c.quotas.length > 1 ? html`<button class="btn sm ghost" onClick=${() => setC({ ...c, quotas: c.quotas.filter((_, j) => j !== i) })}>${t("remove")}</button>` : null}</div>
         <div class="seg"><button type="button" aria-pressed=${q.mode !== "weekly"} onClick=${() => setQ(i, { mode: "daily" })}>Per hari</button>
           <button type="button" aria-pressed=${q.mode === "weekly"} onClick=${() => setQ(i, { mode: "weekly", weeklyLimitMin: q.weeklyLimitMin ?? 300 })}>Per minggu</button></div>
-        <p class="muted small">${q.mode === "weekly" ? `Satu jatah untuk seminggu (${WEEKDAYS[E.weekday(child.period_anchor) - 1]}–${WEEKDAYS[(E.weekday(child.period_anchor) + 5) % 7]}, ikut siklus gajian).` : "Jatah terisi ulang setiap hari."}</p>
+        ${q.mode === "weekly" ? html`<div class="form">
+            <label class="f">Reset mingguan<select class="in" value=${q.resetWeekday || 0} onChange=${(e) => setQ(i, { resetWeekday: Number(e.target.value) || undefined })}>
+              <option value="0">Ikut gajian (${WEEKDAYS[E.weekday(child.period_anchor) - 1]} 00:00)</option>
+              ${WEEKDAYS.map((d, k) => html`<option value=${k + 1}>${d}</option>`)}</select></label>
+            ${q.resetWeekday ? html`<label class="f">Jam reset<input class="in" type="time" value=${String(Math.floor((q.resetMin || 0) / 60)).padStart(2, "0") + ":" + String((q.resetMin || 0) % 60).padStart(2, "0")}
+              onChange=${(e) => { const [h, mm] = (e.target.value || "00:00").split(":").map(Number); setQ(i, { resetMin: h * 60 + mm }); }} /></label>` : null}</div>
+          <p class="muted small">${q.resetWeekday ? `Satu jatah untuk seminggu, terisi ulang setiap ${WEEKDAYS[q.resetWeekday - 1]} pukul ${String(Math.floor((q.resetMin || 0) / 60)).padStart(2, "0")}:${String((q.resetMin || 0) % 60).padStart(2, "0")}.` : `Satu jatah untuk seminggu (${WEEKDAYS[E.weekday(child.period_anchor) - 1]}–${WEEKDAYS[(E.weekday(child.period_anchor) + 5) % 7]}, ikut siklus gajian).`}</p>`
+          : html`<p class="muted small">Jatah terisi ulang setiap hari.</p>`}
         <div class="form">${q.mode === "weekly" ? html`<${Stepper} label="Jatah per minggu" value=${q.weeklyLimitMin ?? 300} step=${15} min=${0} max=${3000} suffix="mnt" onChange=${(n) => setQ(i, { weeklyLimitMin: n })} />`
           : html`<${Stepper} label="Hari sekolah" value=${q.weekdayLimitMin ?? 60} step=${15} min=${0} max=${600} suffix="mnt" onChange=${(n) => setQ(i, { weekdayLimitMin: n })} />
             <${Stepper} label="Akhir pekan" value=${q.weekendLimitMin ?? 120} step=${15} min=${0} max=${600} suffix="mnt" onChange=${(n) => setQ(i, { weekendLimitMin: n })} />`}</div>

@@ -1,6 +1,6 @@
 // Data access for Kids Quest. All security is enforced by the database (RLS); this file only shapes calls.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
-import * as E from "./engine.js?v=202611200712";
+import * as E from "./engine.js?v=202611202038";
 
 export const SUPABASE_URL = "https://giedyhskakaarfxylrsy.supabase.co";
 const PUBLISHABLE_KEY = "sb_publishable_E_Ffj6dlK78QeMOHKYp6gA_YIZhCxKv"; // safe to publish; access is governed by RLS
@@ -113,7 +113,7 @@ export async function materializeAutos(state, child, today) {
     entries: state.entries.filter((x) => x.child_id === child.id),
     excused: child.excused_enabled ? state.excused.filter((x) => x.child_id === child.id).map((x) => x.date) : [],
     sessions: state.sessions.filter((s) => s.child_id === child.id),
-    screen: screenFor(state, child), tz: state.family.timezone, weekAnchor: child.period_anchor,
+    screen: screenFor(state, child), tz: state.family.timezone, weekAnchor: child.period_anchor, now: Date.now(),
   });
   if (!autos.length) return 0;
   await must(sb.from("entries").upsert(autos.map((a) => ({

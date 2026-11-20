@@ -1,5 +1,5 @@
 // Next allowance payment for a child, mirroring what the hourly job and pay_child do.
-import { addDays, periodOf, allowanceDates } from "./engine.js?v=202611200712";
+import { addDays, periodOf, allowanceDates } from "./engine.js?v=202611202038";
 
 /**
  * @param child  children row (allowance, period_anchor, period_days, payday_hour, payday_mode, start_date)

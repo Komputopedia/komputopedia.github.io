@@ -36,13 +36,13 @@ async function tickChild(f: any, c: any, today: string, log: string[]) {
   const [acts, ents, sess, exc, adj] = await Promise.all([
     db.from("activities").select("*").eq("child_id", c.id),
     db.from("entries").select("id,activity_id,date,status,qty,auto_key").eq("child_id", c.id).gte("date", E.addDays(from, -7)),
-    db.from("screen_sessions").select("device_id,started_at,ended_at").eq("child_id", c.id).gte("started_at", new Date(E.localMidnight(E.addDays(from, -1), f.timezone)).toISOString()),
+    db.from("screen_sessions").select("device_id,started_at,ended_at").eq("child_id", c.id).gte("started_at", new Date(E.localMidnight(E.addDays(from, -8), f.timezone)).toISOString()),
     c.excused_enabled ? db.from("excused_days").select("date").eq("child_id", c.id) : Promise.resolve({ data: [] }),
     db.from("screen_adjust").select("date,minutes,quota_id").eq("child_id", c.id).gte("date", from),
   ]);
   const autos = E.deriveAutoEntries({
     today, fromDate: from, activities: acts.data || [], entries: ents.data || [],
-    excused: (exc.data || []).map((x: any) => x.date), sessions: sess.data || [], screen: screenCfg(c, adj.data || []), tz: f.timezone, weekAnchor: c.period_anchor,
+    excused: (exc.data || []).map((x: any) => x.date), sessions: sess.data || [], screen: screenCfg(c, adj.data || []), tz: f.timezone, weekAnchor: c.period_anchor, now: Date.now(),
   });
   if (autos.length) {
     const rows = autos.map((a: any) => ({
