@@ -2,14 +2,14 @@
 import { h, render } from "https://esm.sh/preact@10.24.3";
 import { useState, useEffect, useMemo, useCallback, useRef } from "https://esm.sh/preact@10.24.3/hooks";
 import htm from "https://esm.sh/htm@3.1.1";
-import * as E from "./engine.js?v=202611202038";
-import * as A from "./api.js?v=202611202038";
-import { nextAllowance } from "./allowance.js?v=202611202038";
-import * as Q from "./quran.js?v=202611202038";
-import { t, locale } from "./i18n.js?v=202611202038";
+import * as E from "./engine.js?v=202611202058";
+import * as A from "./api.js?v=202611202058";
+import { nextAllowance } from "./allowance.js?v=202611202058";
+import * as Q from "./quran.js?v=202611202058";
+import { t, locale } from "./i18n.js?v=202611202058";
 
 const html = htm.bind(h);
-const APP_BUILD = "202611202038"; // set by bump-version.sh
+const APP_BUILD = "202611202058"; // set by bump-version.sh
 const VersionTag = () => html`<p class="muted small" style="text-align:center;opacity:.7">Asha Quest v0.2 · build ${APP_BUILD}</p>`;
 
 // ---------- formatting ----------
@@ -19,7 +19,7 @@ const fmtDay = (s, long) => { const [y, m, d] = s.split("-").map(Number); return
 const parseEur = (v) => { const n = Number(String(v).replace(/[€\s]/g, "").replace(",", ".")); return isFinite(n) && n > 0 ? Math.round(n * 100) : null; };
 const mmss = (ms) => { const s = Math.max(0, Math.floor(ms / 1000)); return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0"); };
 const ERR_KEYS = { period_paid: "errPaid", limit_day: "errLimitDay", limit_week: "errLimitWeek", proposals_off: "errProposalsOff",
-  bad_qty: "errBadQty", cannot_remove_self: "errRemoveSelf", last_parent: "errLastParent", is_admin: "errIsAdmin", email_taken: "errEmailTaken", username_taken: "errUsernameTaken" };
+  bad_qty: "errBadQty", gallery_full: "errGalleryFull", cannot_remove_self: "errRemoveSelf", last_parent: "errLastParent", is_admin: "errIsAdmin", email_taken: "errEmailTaken", username_taken: "errUsernameTaken" };
 const errText = (e) => { const m = String(e?.message || e); const k = Object.keys(ERR_KEYS).find((x) => m.includes(x)); return k ? t(ERR_KEYS[k]) : t("errGeneric", { m }); };
 const WEEKDAYS = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"];
 const cycleOf = (child) => ({ anchor: child.period_anchor, periodDays: child.period_days });
@@ -472,7 +472,7 @@ function KindnessJar({ S, child }) {
 
 /** Swipeable photo slideshow; advances by itself every 5 s unless the viewer prefers reduced motion. */
 function Slideshow({ S, child }) {
-  const items = S.media.filter((m) => m.kind === "gallery" && S.urls[m.path] && (!child || !m.child_id || m.child_id === child.id));
+  const items = S.media.filter((m) => m.kind === "gallery" && S.urls[m.path] && child && m.child_id === child.id);
   const track = useRef(null);
   const [i, setI] = useState(0);
   const paused = useRef(false);
@@ -495,16 +495,20 @@ function Slideshow({ S, child }) {
   </section>`;
 }
 
+const GALLERY_MAX = 10; // also enforced in the database (kq.guard_media)
 function Gallery({ S, child, reload, canDeleteAll, compact }) {
   const [busy, run] = useBusy();
   const [view, setView] = useState(null);
   const [caption, setCaption] = useState("");
-  const items = S.media.filter((m) => m.kind === "gallery" && (!child || !m.child_id || m.child_id === child.id));
-  const upload = (e) => { const files = [...(e.target.files || [])]; e.target.value = ""; if (!files.length) return;
-    run(async () => { for (const f of files) await A.uploadMedia(S.family.id, child?.id, f, "gallery", caption.trim()); setCaption(""); await reload(); }, t("saved")); };
-  return html`<section class="panel"><div class="panel-head"><h2>${compact ? t("addPhotoTitle") : t("gallery")}</h2>
-      <label class="btn sm" style="cursor:pointer">${busy ? t("uploading") : t("addPhoto")}<input type="file" accept="image/*" multiple hidden onChange=${upload} disabled=${busy} /></label></div>
-    <input class="in" placeholder=${t("photoCaption")} value=${caption} onInput=${(e) => setCaption(e.target.value)} />
+  const items = S.media.filter((m) => m.kind === "gallery" && child && m.child_id === child.id);
+  const room = GALLERY_MAX - items.length;
+  const upload = (e) => { const files = [...(e.target.files || [])].slice(0, Math.max(0, room)); e.target.value = ""; if (!files.length) return;
+    run(async () => { for (const f of files) await A.uploadMedia(S.family.id, child.id, f, "gallery", caption.trim()); setCaption(""); await reload(); }, t("saved")); };
+  return html`<section class="panel"><div class="panel-head"><h2>${compact ? t("addPhotoTitle") : t("galleryOf", { name: child.name })}</h2>
+      <span class="muted small num">${items.length}/${GALLERY_MAX}</span>
+      ${room > 0 ? html`<label class="btn sm" style="cursor:pointer">${busy ? t("uploading") : t("addPhoto")}<input type="file" accept="image/*" multiple hidden onChange=${upload} disabled=${busy} /></label>` : null}</div>
+    ${room > 0 ? html`<input class="in" placeholder=${t("photoCaption")} value=${caption} onInput=${(e) => setCaption(e.target.value)} />`
+      : html`<p class="muted small">${t("galleryFull", { n: GALLERY_MAX })}</p>`}
     ${!items.length ? html`<div class="empty">${t("noPhotos")}</div>` : compact ? html`<details><summary class="linkbtn">${t("managePhotos", { n: items.length })}</summary>
       <div class="gallery" style="margin-top:8px">${items.map((m) => html`<button type="button" class="ph" onClick=${() => setView(m)}><img src=${S.urls[m.path]} alt=${m.caption || ""} loading="lazy" /></button>`)}</div></details>`
       : html`<div class="gallery">${items.map((m) => html`<button type="button" class="ph" onClick=${() => setView(m)}>
@@ -569,7 +573,7 @@ function ParentHome({ S, reload }) {
   const child = S.children.find((c) => c.id === childId) || S.children[0];
   const pendingCount = S.entries.filter((x) => x.status === "pending").length + S.money.filter((x) => x.status === "pending").length
     + S.sessions.filter((s) => s.needs_review).length + S.paydays.filter((p) => p.status === "draft").length;
-  const tabs = [["check", t("tabCheck"), pendingCount], ["money", t("tabMoney")], ["rules", t("tabRules")], ["screen", t("tabScreen")], ["gallery", t("gallery")], ["family", t("tabFamily")], ...(S.isAdmin ? [["admin", t("tabAdmin")]] : [])];
+  const tabs = [["check", t("tabCheck"), pendingCount], ["money", t("tabMoney")], ["rules", t("tabRules")], ["screen", t("tabScreen")], ["gallery", t("tabGallery")], ["family", t("tabFamily")], ...(S.isAdmin ? [["admin", t("tabAdmin")]] : [])];
   const v = child ? childView(S, child) : null;
   return html`<div class="wrap">
     <header class="top"><${Mascot} /><h1>${S.family.name}<small>${S.me.display_name}</small></h1>
@@ -582,7 +586,10 @@ function ParentHome({ S, reload }) {
     ${child && tab === "money" ? html`<${MoneyTab} key=${child.id} S=${S} child=${child} v=${v} reload=${reload} />` : null}
     ${child && tab === "rules" ? html`<${RulesTab} key=${child.id} S=${S} child=${child} v=${v} reload=${reload} />` : null}
     ${child && tab === "screen" ? html`<${ScreenTab} key=${child.id} S=${S} child=${child} v=${v} reload=${reload} />` : null}
-    ${tab === "gallery" ? html`<${Slideshow} S=${S} child=${null} /><${Gallery} S=${S} child=${null} reload=${reload} canDeleteAll=${true} />` : null}
+    ${child && tab === "gallery" ? html`<${Slideshow} key=${child.id} S=${S} child=${child} /><${Gallery} key=${"g" + child.id} S=${S} child=${child} reload=${reload} canDeleteAll=${true} />
+      <section class="panel"><h2>${t("lookOf", { name: child.name })}</h2>
+        <${BackgroundPicker} S=${S} child=${child} reload=${reload} />
+        <${ParentThemeButton} child=${child} reload=${reload} /></section>` : null}
     ${tab === "family" ? html`<${FamilyTab} key=${child?.id} S=${S} child=${child} reload=${reload} />` : null}
     ${tab === "admin" ? html`<${AdminTab} S=${S} reload=${reload} />` : null}
     <${VersionTag} />
@@ -1022,9 +1029,6 @@ function FamilyTab({ S, child, reload }) {
         ${al.freq === "monthly" ? html`<p class="muted small">Dibayar tiap tanggal 1.</p>`
           : html`<label class="f">Hari<select class="in" value=${al.weekday || 1} onChange=${(e) => setAl({ ...al, weekday: Number(e.target.value) })}>${WEEKDAYS.map((d, i) => html`<option value=${i + 1}>${d}</option>`)}</select></label>`}`}</div>
       <button class="btn sm" style="align-self:flex-start" disabled=${busy} onClick=${() => run(async () => { const a = { enabled: !!al.enabled, mode: al.mode || "schedule", cents: parseEur(al.amount) || 0, freq: al.freq || "weekly", everyWeeks: al.everyWeeks || 1, weekday: al.weekday || 1, monthday: 1, start_date: al.start_date || E.localDate(new Date(), S.family.timezone) }; await A.updateChild(child.id, { allowance: a }); await reload(); }, t("saved"))}>${t("save")}</button>
-      <h3>Gambar latar dan tema</h3>
-      <${BackgroundPicker} S=${S} child=${child} reload=${reload} />
-      <${ParentThemeButton} child=${child} reload=${reload} />
       <h3>Hari libur sholat</h3>
       <label class="check"><input type="checkbox" checked=${child.excused_enabled} onChange=${(e) => run(async () => { await A.updateChild(child.id, { excused_enabled: e.target.checked }); await reload(); })} /> Aktifkan fitur libur (tidak ada −1 otomatis pada hari libur)</label>
       ${child.excused_enabled ? html`<div class="row wrap-row"><input class="in" type="date" style="width:180px" value=${exDay} onInput=${(e) => setExDay(e.target.value)} />

@@ -1,6 +1,6 @@
 // Data access for Kids Quest. All security is enforced by the database (RLS); this file only shapes calls.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
-import * as E from "./engine.js?v=202611202038";
+import * as E from "./engine.js?v=202611202058";
 
 export const SUPABASE_URL = "https://giedyhskakaarfxylrsy.supabase.co";
 const PUBLISHABLE_KEY = "sb_publishable_E_Ffj6dlK78QeMOHKYp6gA_YIZhCxKv"; // safe to publish; access is governed by RLS
@@ -194,7 +194,8 @@ export async function uploadMedia(familyId, childId, file, kind, caption) {
   const path = `${familyId}/${kind}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.jpg`;
   const up = await sb.storage.from(BUCKET).upload(path, blob, { contentType: "image/jpeg" });
   if (up.error) throw up.error;
-  await must(sb.from("media").insert({ family_id: familyId, child_id: childId || null, kind, path, caption: caption || null }));
+  try { await must(sb.from("media").insert({ family_id: familyId, child_id: childId || null, kind, path, caption: caption || null })); }
+  catch (e) { await sb.storage.from(BUCKET).remove([path]); throw e; } // e.g. gallery_full: do not leave the file behind
   return path;
 }
 export async function deleteMedia(m) {
