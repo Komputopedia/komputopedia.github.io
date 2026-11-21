@@ -1,6 +1,6 @@
 // Kids Quest account management. Needs the caller's JWT.
 // Actions: create_family (platform admin); add_parent, rename_parent, reset_parent_password, remove_parent,
-// create_child, set_pin (parents of the family).
+// create_child, set_pin (parents of the family); switch_child (a child, when the family allows it).
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
 const URL_ = Deno.env.get("SUPABASE_URL")!;
@@ -84,6 +84,21 @@ Deno.serve(async (req) => {
           await admin.from("members").insert({ user_id: cu.id, family_id: f.id, role: "child", child_id: c.data.id, display_name: body.name });
         } catch (e) { await admin.from("children").delete().eq("id", c.data.id); throw e; }
         return json({ child: c.data });
+      }
+      case "switch_child": {
+        // A signed-in child moves to a sibling without a PIN, only when the family allows it.
+        // Returns a one-time sign-in token for the sibling; the app exchanges it with verifyOtp.
+        if (me?.role !== "child") throw new Fail("children_only", 403);
+        const f = (await admin.from("families").select("id,sibling_switch").eq("id", me.family_id).single()).data;
+        if (f?.sibling_switch !== "open") throw new Fail("switch_off", 403);
+        if (body.child_id === me.child_id) throw new Fail("bad_input");
+        const m = (await admin.from("members").select("user_id").eq("child_id", body.child_id).eq("family_id", f.id).eq("role", "child").maybeSingle()).data;
+        if (!m) throw new Fail("no_child", 404);
+        const tu = await admin.auth.admin.getUserById(m.user_id);
+        if (tu.error || !tu.data.user?.email) throw new Fail("no_child", 404);
+        const link = await admin.auth.admin.generateLink({ type: "magiclink", email: tu.data.user.email });
+        if (link.error) throw new Fail(link.error.message);
+        return json({ token_hash: link.data.properties.hashed_token });
       }
       case "set_pin": {
         const f = await familyFor(body.family_id);

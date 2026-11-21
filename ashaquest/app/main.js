@@ -2,14 +2,14 @@
 import { h, render } from "https://esm.sh/preact@10.24.3";
 import { useState, useEffect, useMemo, useCallback, useRef } from "https://esm.sh/preact@10.24.3/hooks";
 import htm from "https://esm.sh/htm@3.1.1";
-import * as E from "./engine.js?v=202611202058";
-import * as A from "./api.js?v=202611202058";
-import { nextAllowance } from "./allowance.js?v=202611202058";
-import * as Q from "./quran.js?v=202611202058";
-import { t, locale } from "./i18n.js?v=202611202058";
+import * as E from "./engine.js?v=202611210713";
+import * as A from "./api.js?v=202611210713";
+import { nextAllowance } from "./allowance.js?v=202611210713";
+import * as Q from "./quran.js?v=202611210713";
+import { t, locale } from "./i18n.js?v=202611210713";
 
 const html = htm.bind(h);
-const APP_BUILD = "202611202058"; // set by bump-version.sh
+const APP_BUILD = "202611210713"; // set by bump-version.sh
 const VersionTag = () => html`<p class="muted small" style="text-align:center;opacity:.7">Asha Quest v0.2 · build ${APP_BUILD}</p>`;
 
 // ---------- formatting ----------
@@ -19,7 +19,7 @@ const fmtDay = (s, long) => { const [y, m, d] = s.split("-").map(Number); return
 const parseEur = (v) => { const n = Number(String(v).replace(/[€\s]/g, "").replace(",", ".")); return isFinite(n) && n > 0 ? Math.round(n * 100) : null; };
 const mmss = (ms) => { const s = Math.max(0, Math.floor(ms / 1000)); return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0"); };
 const ERR_KEYS = { period_paid: "errPaid", limit_day: "errLimitDay", limit_week: "errLimitWeek", proposals_off: "errProposalsOff",
-  bad_qty: "errBadQty", gallery_full: "errGalleryFull", cannot_remove_self: "errRemoveSelf", last_parent: "errLastParent", is_admin: "errIsAdmin", email_taken: "errEmailTaken", username_taken: "errUsernameTaken" };
+  bad_qty: "errBadQty", switch_off: "errSwitchOff", wrong_pin: "errWrongPin", gallery_full: "errGalleryFull", cannot_remove_self: "errRemoveSelf", last_parent: "errLastParent", is_admin: "errIsAdmin", email_taken: "errEmailTaken", username_taken: "errUsernameTaken" };
 const errText = (e) => { const m = String(e?.message || e); const k = Object.keys(ERR_KEYS).find((x) => m.includes(x)); return k ? t(ERR_KEYS[k]) : t("errGeneric", { m }); };
 const WEEKDAYS = ["Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu", "Minggu"];
 const cycleOf = (child) => ({ anchor: child.period_anchor, periodDays: child.period_days });
@@ -536,6 +536,26 @@ const PaletteIcon = () => html`<svg viewBox="0 0 24 24" width="20" height="20" f
   <circle cx="7.5" cy="11" r="1.1" fill="currentColor" stroke="none"/><circle cx="10" cy="7.3" r="1.1" fill="currentColor" stroke="none"/>
   <circle cx="14.5" cy="7.3" r="1.1" fill="currentColor" stroke="none"/><circle cx="17" cy="11" r="1.1" fill="currentColor" stroke="none"/></svg>`;
 
+/** Buttons to move to a brother's or sister's page, as the family setting allows (open, with their PIN, or off). */
+function SiblingBar({ S, child }) {
+  const mode = S.family.sibling_switch || "off";
+  const sibs = S.children.filter((c) => c.id !== child.id);
+  const [busy, run] = useBusy();
+  const [ask, setAsk] = useState(null); // sibling waiting for a PIN
+  const [pin, setPin] = useState("");
+  if (mode === "off" || !sibs.length) return null;
+  const go = (sib) => (mode === "pin" ? (setPin(""), setAsk(sib)) : run(() => A.switchToSibling(S.family, sib)));
+  return html`<nav class="sibling-bar" aria-label=${t("siblings")}>
+    <span class="muted small">${t("openSibling")}</span>
+    ${sibs.map((c) => html`<button type="button" class="sib" disabled=${busy} onClick=${() => go(c)}><span class="sib-av" aria-hidden="true">${c.name.slice(0, 1)}</span>${c.name}</button>`)}
+    ${ask && html`<${Sheet} title=${t("pinFor", { name: ask.name })} onClose=${() => setAsk(null)}>
+      <form class="form" onSubmit=${(e) => { e.preventDefault(); run(() => A.switchToSibling(S.family, ask, pin)); }}>
+        <label class="f">${t("pin")}<input class="in" type="password" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="off" value=${pin} onInput=${(e) => setPin(e.target.value)} required autofocus /></label>
+        <button class="btn" disabled=${busy || pin.length !== 6}>${t("openPage", { name: ask.name })}</button></form>
+    </${Sheet}>`}
+  </nav>`;
+}
+
 function ChildHome({ S, reload }) {
   const child = S.children.find((c) => c.id === S.me.child_id);
   if (!child) return html`<div class="wrap"><div class="empty">${t("noFamily")}</div></div>`;
@@ -547,6 +567,7 @@ function ChildHome({ S, reload }) {
     <header class="top"><${Mascot} /><h1>${t("hello", { name: child.name })}<small>${fmtDay(v.today, true)}</small></h1>
       <button class="icon-btn" aria-label=${t("theme")} onClick=${() => setThemeOpen(true)}><${PaletteIcon} /></button>
       <button class="linkbtn" onClick=${() => A.signOut()}>${t("signOut")}</button></header>
+    <${SiblingBar} S=${S} child=${child} />
     ${themeOpen && html`<${ThemeSheet} theme=${child.theme} onSave=${async (th) => { await A.setMyTheme(th); await reload(); }} onClose=${() => setThemeOpen(false)} />`}
     <${Slideshow} S=${S} child=${child} />
     <${SavingsHero} S=${S} child=${child} v=${v} />
@@ -1014,6 +1035,13 @@ function FamilyTab({ S, child, reload }) {
   const [exDay, setExDay] = useState("");
   const myExcused = child ? S.excused.filter((x) => x.child_id === child.id).map((x) => x.date).sort().reverse() : [];
   return html`
+    <section class="panel"><h2>Pindah ke halaman saudara</h2>
+      <p class="muted small">Saat anak sudah masuk, apakah ia bisa membuka halaman kakak/adiknya tanpa keluar dulu?</p>
+      <div class="seg" style="grid-template-columns:repeat(3,1fr)">${[["open", "Bebas"], ["pin", "Pakai PIN saudara"], ["off", "Tidak, keluar dulu"]].map(([k, label]) => html`
+        <button type="button" aria-pressed=${(S.family.sibling_switch || "off") === k} disabled=${busy}
+          onClick=${() => run(async () => { await A.updateFamily(S.family.id, { sibling_switch: k }); await reload(); }, t("saved"))}>${label}</button>`)}</div>
+      <p class="muted small">${{ open: "Anak tinggal mengetuk nama saudaranya.", pin: "Anak harus memasukkan PIN saudaranya.", off: "Tombol pindah tidak muncul. Anak harus keluar lalu masuk sebagai saudaranya." }[S.family.sibling_switch || "off"]}</p>
+    </section>
     ${child ? html`<section class="panel"><h2>${child.name}</h2>
       <p class="muted">Masuk anak: kode keluarga <b>${S.family.code}</b>, nama pengguna <b>${child.username}</b>.</p>
       <div class="row wrap-row"><input class="in" style="width:160px" inputmode="numeric" maxlength="6" placeholder="PIN baru (6 angka)" value=${pin} onInput=${(e) => setPin(e.target.value)} />

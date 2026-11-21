@@ -1,6 +1,6 @@
 // Data access for Kids Quest. All security is enforced by the database (RLS); this file only shapes calls.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
-import * as E from "./engine.js?v=202611202058";
+import * as E from "./engine.js?v=202611210713";
 
 export const SUPABASE_URL = "https://giedyhskakaarfxylrsy.supabase.co";
 const PUBLISHABLE_KEY = "sb_publishable_E_Ffj6dlK78QeMOHKYp6gA_YIZhCxKv"; // safe to publish; access is governed by RLS
@@ -32,6 +32,20 @@ export async function signInChild(code, username, pin) {
   if (r.error) throw r.error;
 }
 export const signOut = () => sb.auth.signOut();
+/**
+ * Move a signed-in child to a sibling's page. With a PIN: sign in as the sibling (the PIN is their password).
+ * Without: the server hands out a one-time token, only when the family allows switching freely.
+ */
+export async function switchToSibling(family, sibling, pin) {
+  if (pin != null) {
+    const r = await sb.auth.signInWithPassword({ email: childEmail(family.code, sibling.username), password: pin });
+    if (r.error) throw new Error("wrong_pin");
+    return;
+  }
+  const { token_hash } = await accounts({ action: "switch_child", child_id: sibling.id });
+  const r = await sb.auth.verifyOtp({ token_hash, type: "email" });
+  if (r.error) throw r.error;
+}
 
 /** Everything the signed-in member may see, in one snapshot. */
 export async function loadAll() {

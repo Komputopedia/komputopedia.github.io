@@ -259,3 +259,9 @@ input[type="range"] { accent-color: var(--accent); width: 100%; }
 .pager .btn:disabled { opacity: .35; }
 .next-allow { display: flex; gap: 10px; align-items: flex-start; background: rgba(var(--card-rgb), .6); border: 1px solid rgba(0,0,0,.06); border-radius: 14px; padding: 10px 12px; margin: 4px 0 8px; }
 .next-allow .em { font-size: 22px; line-height: 1.2; }
+
+/* Sibling switch */
+.sibling-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: -4px 0 12px; }
+.sib { display: inline-flex; align-items: center; gap: 8px; border: 1px solid rgba(0,0,0,.08); background: rgba(var(--card-rgb), .75); color: var(--ink); border-radius: 999px; padding: 4px 14px 4px 4px; font: inherit; font-weight: 700; cursor: pointer; }
+.sib:disabled { opacity: .5; }
+.sib-av { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: var(--accent); color: #fff; font-size: 14px; }
